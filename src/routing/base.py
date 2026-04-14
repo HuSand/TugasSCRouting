@@ -109,7 +109,7 @@ class RouteResult:
 
 @dataclass
 class Scenario:
-    """A routing problem: get from source_node to target_node."""
+    """A routing problem: get from source_node to target_node, optionally via stops."""
     name:          str
     description:   str
     source_node:   int
@@ -118,6 +118,25 @@ class Scenario:
     target_label:  str   = ""
     source_coords: tuple = (0.0, 0.0)   # (lat, lon) for map pins
     target_coords: tuple = (0.0, 0.0)
+    route_nodes:   Optional[List[int]] = None
+    route_labels:  Optional[List[str]] = None
+    route_coords:  Optional[List[tuple]] = None
+
+    @property
+    def node_sequence(self) -> List[int]:
+        return self.route_nodes or [self.source_node, self.target_node]
+
+    @property
+    def label_sequence(self) -> List[str]:
+        return self.route_labels or [self.source_label, self.target_label]
+
+    @property
+    def coord_sequence(self) -> List[tuple]:
+        return self.route_coords or [self.source_coords, self.target_coords]
+
+    @property
+    def is_multi_stop(self) -> bool:
+        return len(self.node_sequence) > 2
 
 
 # ──────────────────────────────────────────────────────────────

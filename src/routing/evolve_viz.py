@@ -169,6 +169,7 @@ select:focus{border-color:#e63946}
     <select id="scenario-select"></select>
   </div>
   <div id="stats">
+    <div class="stat"><span class="stat-val" id="s-dist">-</span><span class="stat-lbl">GA Dist (km)</span></div>
     <div class="stat"><span class="stat-val" id="s-gen">—</span><span class="stat-lbl">Gen</span></div>
     <div class="stat"><span class="stat-val" id="s-time">—</span><span class="stat-lbl">GA Best (min)</span></div>
     <div class="stat"><span class="stat-val" id="s-impr">—</span><span class="stat-lbl">Improved</span></div>
@@ -288,10 +289,11 @@ function renderGARoute(algoName, genIdx, weight, opacity){
   const frame=hist[Math.min(genIdx,hist.length-1)];
   if(!frame.coords||frame.coords.length<2) return;
   if(gaLayers[algoName]) map.removeLayer(gaLayers[algoName]);
+  const distText = frame.dist!==undefined ? ` | ${Number(frame.dist).toFixed(2)} km` : '';
   gaLayers[algoName]=L.polyline(frame.coords,{
     color:col(algoName),weight:weight||5,opacity:opacity||.92,
     interactive:true
-  }).bindTooltip(`${algoName} | gen ${frame.gen} | ${frame.min.toFixed(1)} min`).addTo(map);
+  }).bindTooltip(`${algoName} | gen ${frame.gen} | ${frame.min.toFixed(1)} min${distText}`).addTo(map);
 }
 
 // ── Render static baseline route ─────────────────────────────
@@ -317,10 +319,11 @@ function updateLegend(genIdx){
       const hist=getHistory(a);
       if(!hist.length) return;
       const frame=hist[Math.min(genIdx,hist.length-1)];
+      const gaDist=frame.dist!==undefined ? ` | ${Number(frame.dist).toFixed(2)} km` : '';
       const row=document.createElement('div'); row.className='leg-row';
       row.innerHTML=`<div class="leg-swatch" style="background:${col(a)}"></div>
         <span class="leg-name">${a}</span>
-        <span class="leg-val">${frame.min.toFixed(1)} min</span>`;
+        <span class="leg-val">${frame.min.toFixed(1)} min${gaDist}</span>`;
       legRows.appendChild(row);
     });
     // Baseline rows
@@ -331,7 +334,7 @@ function updateLegend(genIdx){
       const row=document.createElement('div'); row.className='leg-row';
       row.innerHTML=`<div class="leg-swatch leg-dashed" style="color:${col(b)}"></div>
         <span class="leg-name">${b}</span>
-        <span class="leg-val">${data.min.toFixed(1)} min</span>`;
+        <span class="leg-val">${data.min.toFixed(1)} min | ${data.dist.toFixed(2)} km</span>`;
       legRows.appendChild(row);
     });
   } else {
@@ -352,11 +355,11 @@ function renderGen(genIdx){
     Object.keys(DATA.algorithms).forEach(a=>renderGARoute(a,genIdx,4,.85));
 
     // Stats: best GA time at this gen
-    let bestMin=Infinity, bestAlgo='';
+    let bestMin=Infinity, bestDist=null, bestAlgo='';
     Object.keys(DATA.algorithms).forEach(a=>{
       const h=getHistory(a); if(!h.length) return;
       const f=h[Math.min(genIdx,h.length-1)];
-      if(f.min<bestMin){bestMin=f.min;bestAlgo=a;}
+      if(f.min<bestMin){bestMin=f.min;bestDist=f.dist;bestAlgo=a;}
     });
     const totalGens=maxGenAll();
     const refData=(DATA.baselines['dijkstra_time']||{})[sc];
@@ -368,6 +371,7 @@ function renderGen(genIdx){
 
     document.getElementById('s-gen').textContent  = genIdx+1;
     document.getElementById('s-time').textContent = bestMin<Infinity?bestMin.toFixed(1):'—';
+    document.getElementById('s-dist').textContent = bestDist!==null&&bestDist!==undefined?Number(bestDist).toFixed(2):'-';
     document.getElementById('s-impr').textContent = impr+'%';
     document.getElementById('s-ref').textContent  = refData?refData.min.toFixed(1):'—';
     document.getElementById('s-total').textContent= totalGens;
@@ -387,6 +391,7 @@ function renderGen(genIdx){
 
     document.getElementById('s-gen').textContent  = frame.gen;
     document.getElementById('s-time').textContent = frame.min.toFixed(1);
+    document.getElementById('s-dist').textContent = frame.dist!==undefined?Number(frame.dist).toFixed(2):'-';
     document.getElementById('s-impr').textContent = impr+'%';
     document.getElementById('s-ref').textContent  = refData?refData.min.toFixed(1):'—';
     document.getElementById('s-total').textContent= hist.length;

@@ -165,6 +165,18 @@ def _ga_path_cost(G, path: list) -> float:
     return total
 
 
+def _ga_path_distance(G, path: list) -> float:
+    """Total distance sepanjang path dalam meter."""
+    total = 0.0
+    for u, v in zip(path[:-1], path[1:]):
+        data = G.get_edge_data(u, v)
+        if data is None:
+            return float("inf")
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        total += float(best.get("length", 0))
+    return total
+
+
 def _ga_random_path(G, source: int, target: int, rng: random.Random):
     """
     Hasilkan 1 path dengan Dijkstra + noise acak pada bobot edge.
@@ -281,6 +293,7 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
         gen_history.append({
             "gen":     gen_idx + 1,
             "min":     round(_ga_path_cost(G, elite) / 60, 3),  # selalu tampilkan travel_time asli
+            "dist":    round(_ga_path_distance(G, elite) / 1000, 3),
             "coords":  coords,
             "streets": _route_streets(G, elite),
         })
@@ -575,7 +588,7 @@ class GeraldGA(BaseRoutingAlgorithm):
 #                                    Kasus: rute terpanjang lintas kota
 # ──────────────────────────────────────────────────────────────
 
-EXAMPLE_SCENARIOS = [
+_LEGACY_SINGLE_STOP_SCENARIOS = [
     Scenario(
         name="darmo_to_rsu_haji",
         description="Transfer pasien: RS Darmo (tengah-barat) → RSU Haji Surabaya (timur)",
@@ -659,3 +672,101 @@ EXAMPLE_SCENARIOS = [
 #         ms = (time.perf_counter() - t0) * 1000
 #         return RouteResult.build(G, self.name, scenario_name,
 #                                  source_node, target_node, route, ms, metadata)
+
+
+_SCENARIO_POINTS = {
+    "rs_darmo": {
+        "label": "RS Darmo",
+        "node": 1685220157,
+        "coords": (-7.2874, 112.7382),
+    },
+    "rsu_haji": {
+        "label": "RSU Haji Surabaya",
+        "node": 4332874690,
+        "coords": (-7.2828, 112.7798),
+    },
+    "polsek_genteng": {
+        "label": "Polsek Genteng",
+        "node": 5589485735,
+        "coords": (-7.2556, 112.7483),
+    },
+    "national": {
+        "label": "National Hospital",
+        "node": 1721014942,
+        "coords": (-7.2993, 112.6764),
+    },
+    "rs_ramelan": {
+        "label": "RS Angkatan Laut Dr. Ramelan",
+        "node": 1719470350,
+        "coords": (-7.3093, 112.7382),
+    },
+    "polsek_rungkut": {
+        "label": "Polsek Rungkut",
+        "node": 4574365996,
+        "coords": (-7.3384, 112.7712),
+    },
+    "rs_onkologi": {
+        "label": "RS Onkologi",
+        "node": 7059452149,
+        "coords": (-7.2909, 112.7893),
+    },
+    "ciputra": {
+        "label": "Ciputra Hospital",
+        "node": 4163428113,
+        "coords": (-7.2809, 112.6346),
+    },
+    "polsek_benowo": {
+        "label": "Polsek Benowo",
+        "node": 5539027568,
+        "coords": (-7.2359, 112.6076),
+    },
+}
+
+
+def _multi_stop_scenario(name: str, description: str, point_keys: list) -> Scenario:
+    points = [_SCENARIO_POINTS[k] for k in point_keys]
+    nodes = [p["node"] for p in points]
+    labels = [p["label"] for p in points]
+    coords = [p["coords"] for p in points]
+    return Scenario(
+        name=name,
+        description=description,
+        source_node=nodes[0],
+        target_node=nodes[-1],
+        source_label=labels[0],
+        target_label=labels[-1],
+        source_coords=coords[0],
+        target_coords=coords[-1],
+        route_nodes=nodes,
+        route_labels=labels,
+        route_coords=coords,
+    )
+
+
+EXAMPLE_SCENARIOS = [
+    _multi_stop_scenario(
+        "emergency_west_to_east_5",
+        "5-stop emergency route from west Surabaya toward east Surabaya hospitals",
+        ["polsek_benowo", "ciputra", "national", "rs_darmo", "rs_onkologi"],
+    ),
+    _multi_stop_scenario(
+        "hospital_transfer_chain_5",
+        "5-stop hospital transfer chain across west, central, south, and east Surabaya",
+        ["ciputra", "national", "rs_darmo", "rs_ramelan", "rsu_haji"],
+    ),
+    _multi_stop_scenario(
+        "police_healthcare_patrol_5",
+        "5-stop police and healthcare patrol from city center to eastern Surabaya",
+        ["polsek_genteng", "rs_darmo", "rs_ramelan", "polsek_rungkut", "rs_onkologi"],
+    ),
+    _multi_stop_scenario(
+        "west_central_east_response_5",
+        "5-stop response route crossing west, center, and east Surabaya",
+        ["national", "polsek_genteng", "rs_darmo", "rsu_haji", "rs_onkologi"],
+    ),
+    _multi_stop_scenario(
+        "south_east_emergency_chain_5",
+        "5-stop emergency route through south and east Surabaya facilities",
+        ["rs_ramelan", "rs_darmo", "polsek_genteng", "rsu_haji", "polsek_rungkut"],
+    ),
+]

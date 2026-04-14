@@ -71,6 +71,7 @@ def build_evolution_viewer(
                 for label, coords in zip(s.label_sequence, s.coord_sequence)
             ],
             "optimize_order": s.optimize_order,
+            "round_trip":     s.round_trip,
         }
         for s in scenarios
     }
@@ -152,6 +153,14 @@ select:focus{border-color:#e63946}
 #speed-select{background:#374151;color:#e5e7eb;border:1px solid #4b5563;
               border-radius:5px;padding:4px 8px;font-size:12px}
 #progress{height:3px;background:#e63946;width:0%;transition:width .1s linear}
+/* animate toggle */
+#anim-toggle{appearance:none;-webkit-appearance:none;width:36px;height:20px;
+             background:#374151;border-radius:10px;cursor:pointer;position:relative;
+             transition:background .2s;border:none;outline:none;vertical-align:middle}
+#anim-toggle:checked{background:#e63946}
+#anim-toggle::after{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;
+                    background:#fff;border-radius:50%;transition:left .2s}
+#anim-toggle:checked::after{left:19px}
 /* map legend overlay */
 #map-legend{position:absolute;bottom:24px;right:10px;z-index:999;
             background:rgba(31,41,55,.93);border:1px solid #374151;
@@ -201,11 +210,16 @@ select:focus{border-color:#e63946}
   <div class="speed-ctrl">
     <label>Speed</label>
     <select id="speed-select">
-      <option value="600">Slow</option>
-      <option value="300" selected>Normal</option>
-      <option value="120">Fast</option>
-      <option value="40">Turbo</option>
+      <option value="2500">Very Slow</option>
+      <option value="1500" selected>Slow</option>
+      <option value="700">Normal</option>
+      <option value="220">Fast</option>
+      <option value="50">Turbo</option>
     </select>
+  </div>
+  <div class="speed-ctrl">
+    <label>Animate</label>
+    <input type="checkbox" id="anim-toggle" checked title="Animate route drawing">
   </div>
 </div>
 
@@ -225,15 +239,34 @@ let stopMarkers  = [];
 let playTimer    = null;
 let isPlaying    = false;
 
-const algoSel  = document.getElementById('algo-select');
-const scenSel  = document.getElementById('scenario-select');
-const slider   = document.getElementById('gen-slider');
-const genLabel = document.getElementById('gen-label');
-const playBtn  = document.getElementById('play-btn');
-const speedSel = document.getElementById('speed-select');
-const progress = document.getElementById('progress');
-const legend   = document.getElementById('map-legend');
-const legRows  = document.getElementById('legend-rows');
+const algoSel    = document.getElementById('algo-select');
+const scenSel    = document.getElementById('scenario-select');
+const slider     = document.getElementById('gen-slider');
+const genLabel   = document.getElementById('gen-label');
+const playBtn    = document.getElementById('play-btn');
+const speedSel   = document.getElementById('speed-select');
+const animToggle = document.getElementById('anim-toggle');
+const progress   = document.getElementById('progress');
+const legend     = document.getElementById('map-legend');
+const legRows    = document.getElementById('legend-rows');
+
+// ── Path draw animation (SVG stroke-dashoffset trick) ─────────
+function animatePath(polyline, durationMs){
+  if(!animToggle.checked) return;
+  setTimeout(()=>{
+    const el=polyline.getElement();
+    if(!el) return;
+    try{
+      const len=el.getTotalLength();
+      el.style.strokeDasharray=len+' '+len;
+      el.style.strokeDashoffset=len;
+      el.style.transition='none';
+      void el.getBoundingClientRect(); // force reflow so initial state sticks
+      el.style.transition=`stroke-dashoffset ${durationMs}ms ease-out`;
+      el.style.strokeDashoffset='0';
+    }catch(e){}
+  },0);
+}
 
 const IS_ALL = '__ALL__';
 
@@ -253,7 +286,8 @@ ALL_ALGO_NAMES.forEach(a=>{
   algoSel.appendChild(o);
 });
 Object.keys(DATA.scenarios).forEach(s=>{
-  const o=document.createElement('option'); o.value=s; o.textContent=s;
+  const o=document.createElement('option'); o.value=s;
+  o.textContent = DATA.scenarios[s].round_trip ? s+' ↩' : s;
   scenSel.appendChild(o);
 });
 
@@ -321,10 +355,14 @@ function renderGARoute(algoName, genIdx, weight, opacity){
   const drawMin=frame.candidate_min!==undefined ? frame.candidate_min : frame.min;
   const drawDist=frame.candidate_dist!==undefined ? frame.candidate_dist : frame.dist;
   const distText = drawDist!==undefined ? ` | ${Number(drawDist).toFixed(2)} km` : '';
-  gaLayers[algoName]=L.polyline(drawCoords,{
+  const gaPl=L.polyline(drawCoords,{
     color:col(algoName),weight:weight||5,opacity:opacity||.92,
     interactive:true
   }).bindTooltip(`${algoName} | gen ${frame.gen} candidate | ${drawMin.toFixed(1)} min${distText}`).addTo(map);
+  gaLayers[algoName]=gaPl;
+  // animate line draw — duration scales with playback speed so fast/turbo still feel snappy
+  const speedMs=parseInt(speedSel.value,10);
+  animatePath(gaPl, Math.round(speedMs*0.80));
 }
 
 // ── Render static baseline route ─────────────────────────────
@@ -344,8 +382,10 @@ function renderBaseline(algoName){
     baselineStyle.opacity=.9;
     baselineStyle.weight=4;
   }
-  baseLayers[algoName]=L.polyline(b.coords,baselineStyle)
+  const basePl=L.polyline(b.coords,baselineStyle)
     .bindTooltip(`${algoName} | ${b.min.toFixed(1)} min | ${b.dist.toFixed(2)} km (static)`).addTo(map);
+  baseLayers[algoName]=basePl;
+  animatePath(basePl, 1100);
 }
 
 // ── Update legend ─────────────────────────────────────────────
@@ -474,13 +514,22 @@ function resetScene(){
       {label:sc.target_label,coords:sc.target}
     ];
     stops.forEach((stop,idx)=>{
+      const isStart = idx===0;
+      const pinColor = isStart ? '#e63946' : '#4b5563';
       const marker=L.marker(stop.coords,{
-        icon:stopIcon(String(idx+1),'#4b5563'),
+        icon:stopIcon(String(idx+1), pinColor),
         zIndexOffset:1000
-      }).addTo(map).bindTooltip(`${idx+1}. ${stop.label}`);
-      marker.bindPopup(`<b>Destination ${idx+1}</b><br>${stop.label}`);
+      }).addTo(map).bindTooltip(`${idx+1}. ${stop.label}${isStart&&sc.round_trip?' (Start / Return)':''}`);
+      marker.bindPopup(`<b>Destination ${idx+1}${isStart&&sc.round_trip?' — Start &amp; Return':''}</b><br>${stop.label}`);
       stopMarkers.push(marker);
     });
+    // For round-trip: show a faint dashed line hinting the return leg direction
+    if(sc.round_trip && stops.length>=2){
+      const returnHint=L.polyline([stops[stops.length-1].coords, stops[0].coords],{
+        color:'#e63946',weight:2,opacity:.35,dashArray:'6 8',interactive:false
+      }).addTo(map);
+      stopMarkers.push(returnHint);
+    }
     try{
       map.fitBounds(stops.map(s=>s.coords),{padding:[30,30]});
     }catch(e){
@@ -488,8 +537,13 @@ function resetScene(){
     }
   }
 
-  // Draw static baselines (always visible)
-  Object.keys(DATA.baselines).forEach(b=>renderBaseline(b));
+  // Draw baselines: all when in "All" mode, only the selected one when a baseline is picked,
+  // nothing when a single GA/SA algo is selected (keeps the view uncluttered).
+  if(isAll){
+    Object.keys(DATA.baselines).forEach(b=>renderBaseline(b));
+  } else if(!isGAAlgo(algo)){
+    renderBaseline(algo);
+  }
 
   const maxG = isAll ? maxGenAll() : (getHistory(algo).length||1);
   slider.min=1; slider.max=maxG; slider.value=1;

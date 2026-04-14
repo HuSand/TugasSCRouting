@@ -151,6 +151,8 @@ class ResultVisualiser:
 
         # Legend
         route_label = " -> ".join(scenario.label_sequence)
+        if scenario.round_trip:
+            route_label += " -> (return to start)"
         if scenario.optimize_order:
             route_label = "unordered destinations; each algorithm chooses visit order"
         legend = (

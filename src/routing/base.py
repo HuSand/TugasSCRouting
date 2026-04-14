@@ -121,6 +121,7 @@ class Scenario:
     route_nodes:   Optional[List[int]] = None
     route_labels:  Optional[List[str]] = None
     route_coords:  Optional[List[tuple]] = None
+    optimize_order: bool = False
 
     @property
     def node_sequence(self) -> List[int]:

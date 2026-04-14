@@ -24,6 +24,7 @@ ALL_COLORS = {
     "dijkstra_time":     "#9C27B0",
     "dijkstra_distance": "#795548",
     "astar_time":        "#00BCD4",
+    "astar_distance":    "#607D8B",
 }
 
 
@@ -60,6 +61,14 @@ def build_evolution_viewer(
             "target":       list(s.target_coords),
             "source_label": s.source_label,
             "target_label": s.target_label,
+            "stops": [
+                {
+                    "label": label,
+                    "coords": list(coords),
+                }
+                for label, coords in zip(s.label_sequence, s.coord_sequence)
+            ],
+            "optimize_order": s.optimize_order,
         }
         for s in scenarios
     }
@@ -145,7 +154,7 @@ select:focus{border-color:#e63946}
 #map-legend{position:absolute;bottom:24px;right:10px;z-index:999;
             background:rgba(31,41,55,.93);border:1px solid #374151;
             border-radius:8px;padding:10px 14px;font-size:12px;
-            line-height:1.9;min-width:200px;display:none;
+            line-height:1.9;min-width:250px;display:none;
             box-shadow:0 4px 12px rgba(0,0,0,.5)}
 #map-legend h3{font-size:11px;color:#9ca3af;text-transform:uppercase;
                letter-spacing:.6px;margin-bottom:4px}
@@ -180,7 +189,7 @@ select:focus{border-color:#e63946}
 
 <div id="progress"></div>
 <div id="map">
-  <div id="map-legend"><h3>Legend</h3><div id="legend-rows"></div></div>
+  <div id="map-legend"><h3>Legend</h3><div style="color:#9ca3af;font-size:11px;margin-bottom:4px">Numbered pins are all destinations. GA lines show explored candidates; stats show best-so-far.</div><div id="legend-rows"></div></div>
 </div>
 
 <div id="bottombar">
@@ -210,8 +219,7 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
 // layer stores
 let gaLayers     = {};   // algo_name -> L.Polyline  (GA routes, update per gen)
 let baseLayers   = {};   // algo_name -> L.Polyline  (static baselines)
-let startMarker  = null;
-let endMarker    = null;
+let stopMarkers  = [];
 let playTimer    = null;
 let isPlaying    = false;
 
@@ -254,6 +262,15 @@ function iconDiv(letter,bg){
   });
 }
 
+function stopIcon(label,bg){
+  return L.divIcon({
+    html:`<div style="background:${bg};color:#fff;border-radius:50%;width:30px;height:30px;
+          display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+          border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45)">${label}</div>`,
+    iconSize:[30,30],iconAnchor:[15,15],className:''
+  });
+}
+
 function clearGALayers(){
   Object.values(gaLayers).forEach(l=>map.removeLayer(l));
   gaLayers={};
@@ -263,8 +280,8 @@ function clearBaseLayers(){
   baseLayers={};
 }
 function clearMarkers(){
-  if(startMarker){map.removeLayer(startMarker);startMarker=null;}
-  if(endMarker)  {map.removeLayer(endMarker);  endMarker=null;}
+  stopMarkers.forEach(m=>map.removeLayer(m));
+  stopMarkers=[];
 }
 
 function getHistory(algoName){
@@ -287,13 +304,16 @@ function renderGARoute(algoName, genIdx, weight, opacity){
   const hist=getHistory(algoName);
   if(!hist.length) return;
   const frame=hist[Math.min(genIdx,hist.length-1)];
-  if(!frame.coords||frame.coords.length<2) return;
+  const drawCoords=frame.candidate_coords||frame.coords;
+  if(!drawCoords||drawCoords.length<2) return;
   if(gaLayers[algoName]) map.removeLayer(gaLayers[algoName]);
-  const distText = frame.dist!==undefined ? ` | ${Number(frame.dist).toFixed(2)} km` : '';
-  gaLayers[algoName]=L.polyline(frame.coords,{
+  const drawMin=frame.candidate_min!==undefined ? frame.candidate_min : frame.min;
+  const drawDist=frame.candidate_dist!==undefined ? frame.candidate_dist : frame.dist;
+  const distText = drawDist!==undefined ? ` | ${Number(drawDist).toFixed(2)} km` : '';
+  gaLayers[algoName]=L.polyline(drawCoords,{
     color:col(algoName),weight:weight||5,opacity:opacity||.92,
     interactive:true
-  }).bindTooltip(`${algoName} | gen ${frame.gen} | ${frame.min.toFixed(1)} min${distText}`).addTo(map);
+  }).bindTooltip(`${algoName} | gen ${frame.gen} candidate | ${drawMin.toFixed(1)} min${distText}`).addTo(map);
 }
 
 // ── Render static baseline route ─────────────────────────────
@@ -319,11 +339,13 @@ function updateLegend(genIdx){
       const hist=getHistory(a);
       if(!hist.length) return;
       const frame=hist[Math.min(genIdx,hist.length-1)];
-      const gaDist=frame.dist!==undefined ? ` | ${Number(frame.dist).toFixed(2)} km` : '';
+      const shownMin=frame.candidate_min!==undefined ? frame.candidate_min : frame.min;
+      const shownDist=frame.candidate_dist!==undefined ? frame.candidate_dist : frame.dist;
+      const gaDist=shownDist!==undefined ? ` | ${Number(shownDist).toFixed(2)} km` : '';
       const row=document.createElement('div'); row.className='leg-row';
       row.innerHTML=`<div class="leg-swatch" style="background:${col(a)}"></div>
         <span class="leg-name">${a}</span>
-        <span class="leg-val">${frame.min.toFixed(1)} min${gaDist}</span>`;
+        <span class="leg-val">${shownMin.toFixed(1)} min${gaDist}</span>`;
       legRows.appendChild(row);
     });
     // Baseline rows
@@ -414,11 +436,23 @@ function resetScene(){
   const isAll = algo===IS_ALL;
 
   if(sc){
-    startMarker=L.marker(sc.source,{icon:iconDiv('S','#4CAF50'),zIndexOffset:1000})
-      .addTo(map).bindTooltip('START: '+sc.source_label);
-    endMarker=L.marker(sc.target,{icon:iconDiv('E','#e63946'),zIndexOffset:1000})
-      .addTo(map).bindTooltip('END: '+sc.target_label);
-    map.setView(sc.source,13);
+    const stops=sc.stops&&sc.stops.length ? sc.stops : [
+      {label:sc.source_label,coords:sc.source},
+      {label:sc.target_label,coords:sc.target}
+    ];
+    stops.forEach((stop,idx)=>{
+      const marker=L.marker(stop.coords,{
+        icon:stopIcon(String(idx+1),'#4b5563'),
+        zIndexOffset:1000
+      }).addTo(map).bindTooltip(`${idx+1}. ${stop.label}`);
+      marker.bindPopup(`<b>Destination ${idx+1}</b><br>${stop.label}`);
+      stopMarkers.push(marker);
+    });
+    try{
+      map.fitBounds(stops.map(s=>s.coords),{padding:[30,30]});
+    }catch(e){
+      map.setView(sc.source,13);
+    }
   }
 
   // Draw static baselines (always visible)

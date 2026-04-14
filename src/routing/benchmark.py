@@ -4,6 +4,7 @@ Algorithm registry, benchmark runner, and scenario builder.
 
 import logging
 import time
+from itertools import permutations
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -110,6 +111,14 @@ def _write_evolution_log(result: RouteResult, log_dir: Path):
             else:
                 f.write(f"  Route : -\n")
 
+            cand_min = frame.get("candidate_min")
+            cand_dist = frame.get("candidate_dist")
+            if cand_min is not None:
+                f.write(f"  Candidate : {float(cand_min):.4f} min")
+                if cand_dist is not None:
+                    f.write(f"  |  {float(cand_dist):.3f} km")
+                f.write("\n")
+
             prev         = t
             prev_streets = streets
 
@@ -179,15 +188,63 @@ class BenchmarkRunner:
     def add_scenario(self, scenario: Scenario):
         self.scenarios.append(scenario)
 
+    @staticmethod
+    def _order_weight(algo: BaseRoutingAlgorithm) -> str:
+        return "length" if "distance" in algo.name else "travel_time"
+
+    def _best_visit_order(self,
+                          G: nx.MultiDiGraph,
+                          algo: BaseRoutingAlgorithm,
+                          nodes: list) -> tuple:
+        weight = self._order_weight(algo)
+        if len(nodes) <= 2:
+            return nodes, weight, 0.0
+
+        pair_cost = {}
+        for src in nodes:
+            for dst in nodes:
+                if src == dst:
+                    continue
+                try:
+                    pair_cost[(src, dst)] = nx.shortest_path_length(
+                        G, src, dst, weight=weight
+                    )
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
+                    pair_cost[(src, dst)] = float("inf")
+
+        best_order = None
+        best_cost = float("inf")
+        for order in permutations(nodes):
+            cost = sum(pair_cost[(src, dst)]
+                       for src, dst in zip(order[:-1], order[1:]))
+            if cost < best_cost:
+                best_order = list(order)
+                best_cost = cost
+
+        return best_order or nodes, weight, best_cost
+
     def _run_algorithm_on_scenario(self,
                                    algo: BaseRoutingAlgorithm,
                                    G: nx.MultiDiGraph,
                                    scenario: Scenario) -> RouteResult:
         nodes = scenario.node_sequence
         labels = scenario.label_sequence
+        coords = scenario.coord_sequence
         if len(nodes) <= 2:
             return algo.safe_run(G, scenario.source_node,
                                  scenario.target_node, scenario.name)
+
+        order_objective = "fixed"
+        order_score = None
+        if scenario.optimize_order:
+            ordered_nodes, order_objective, order_score = self._best_visit_order(
+                G, algo, nodes
+            )
+            idx_by_node = {node: i for i, node in enumerate(nodes)}
+            order_idx = [idx_by_node[n] for n in ordered_nodes]
+            nodes = ordered_nodes
+            labels = [labels[i] for i in order_idx]
+            coords = [coords[i] for i in order_idx]
 
         t0 = time.perf_counter()
         full_route: list = []
@@ -215,8 +272,8 @@ class BenchmarkRunner:
                        f"{leg_rows[-1]['from']} -> {leg_rows[-1]['to']} | "
                        f"{result.error}")
                 return RouteResult.failure(algo.name, scenario.name,
-                                           scenario.source_node,
-                                           scenario.target_node,
+                                           nodes[0],
+                                           nodes[-1],
                                            err, elapsed)
 
             if not full_route:
@@ -229,6 +286,10 @@ class BenchmarkRunner:
             "multi_stop": True,
             "stop_count": len(nodes),
             "stops": labels,
+            "visit_order_nodes": nodes,
+            "visit_order_coords": coords,
+            "order_objective": order_objective,
+            "order_score": order_score,
             "legs": leg_rows,
         }
         histories = [r.metadata.get("gen_history") for r in leg_results]
@@ -237,9 +298,13 @@ class BenchmarkRunner:
             combined_history = []
             for gen_idx in range(gen_count):
                 coords = []
+                candidate_coords = []
                 streets = []
+                candidate_streets = []
                 total_min = 0.0
                 total_dist = 0.0
+                candidate_min = 0.0
+                candidate_dist = 0.0
                 for history in histories:
                     frame = history[gen_idx]
                     frame_coords = frame.get("coords", [])
@@ -250,12 +315,28 @@ class BenchmarkRunner:
                     streets.extend(frame.get("streets", []))
                     total_min += float(frame.get("min", 0.0))
                     total_dist += float(frame.get("dist", 0.0))
+
+                    cand_coords = frame.get("candidate_coords", frame_coords)
+                    if candidate_coords and cand_coords:
+                        candidate_coords.extend(cand_coords[1:])
+                    else:
+                        candidate_coords.extend(cand_coords)
+                    candidate_streets.extend(frame.get("candidate_streets",
+                                                        frame.get("streets", [])))
+                    candidate_min += float(frame.get("candidate_min",
+                                                     frame.get("min", 0.0)))
+                    candidate_dist += float(frame.get("candidate_dist",
+                                                      frame.get("dist", 0.0)))
                 combined_history.append({
                     "gen": gen_idx + 1,
                     "min": round(total_min, 3),
                     "dist": round(total_dist, 3),
                     "coords": coords,
                     "streets": streets,
+                    "candidate_min": round(candidate_min, 3),
+                    "candidate_dist": round(candidate_dist, 3),
+                    "candidate_coords": candidate_coords,
+                    "candidate_streets": candidate_streets,
                 })
 
             first_meta = leg_results[0].metadata
@@ -267,7 +348,7 @@ class BenchmarkRunner:
                 "gen_history": combined_history,
             })
         return RouteResult.build(G, algo.name, scenario.name,
-                                 scenario.source_node, scenario.target_node,
+                                 nodes[0], nodes[-1],
                                  full_route, elapsed, metadata)
 
     def run(self, G: nx.MultiDiGraph) -> pd.DataFrame:
@@ -388,7 +469,7 @@ def build_scenarios(G: nx.MultiDiGraph,
 
 def run_platform(cfg):
     from src.routing.algorithms import (
-        DijkstraTime, DijkstraDistance, AStarTime,
+        DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
         SandyGA, BurhanGA, BimoGA, GeraldGA,
         EXAMPLE_SCENARIOS,
     )
@@ -426,6 +507,7 @@ def run_platform(cfg):
     registry.register(DijkstraTime())      # baseline: rute tercepat
     registry.register(DijkstraDistance()) # baseline: rute terpendek
     registry.register(AStarTime())        # baseline: A* tercepat
+    registry.register(AStarDistance())    # baseline: A* terpendek
     registry.register(SandyGA())          # Sandy
     registry.register(BurhanGA())         # Burhan
     registry.register(BimoGA())           # Bimo

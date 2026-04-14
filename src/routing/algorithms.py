@@ -271,6 +271,42 @@ def _ga_tournament(population: list, fitness: list,
     return population[winner_idx]
 
 
+def _sa_noisy_shortest_path(G, source: int, target: int,
+                            rng: random.Random, noise_min=0.85, noise_max=1.35):
+    """
+    Hasilkan kandidat rute untuk SA dengan Dijkstra berbobot length + noise.
+    Fokusnya shortest path, jadi objective dasarnya jarak fisik, bukan waktu.
+    """
+    def noisy_length(u, v, data):
+        best = min(data.values(), key=lambda d: float(d.get("length", 999999)))
+        dist = float(best.get("length", 999999))
+        return dist * rng.uniform(noise_min, noise_max)
+
+    try:
+        return nx.shortest_path(G, source, target, weight=noisy_length)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return None
+
+
+def _sa_neighbor_path(G, path: list, rng: random.Random) -> list:
+    """
+    Tetangga SA: pilih sub-rute acak, lalu cari penggantinya dengan
+    shortest path bernoise supaya eksplorasi tetap valid di graph jalan.
+    """
+    if len(path) < 3:
+        return path[:]
+
+    i = rng.randint(0, len(path) - 2)
+    max_span = max(2, len(path) // 3)
+    j = rng.randint(i + 1, min(i + max_span, len(path) - 1))
+    segment = _sa_noisy_shortest_path(
+        G, path[i], path[j], rng, noise_min=0.75, noise_max=1.45
+    )
+    if not segment:
+        return path[:]
+    return path[:i] + segment + path[j + 1:]
+
+
 # ──────────────────────────────────────────────────────────────
 # INDIVIDUAL GA SLOTS
 # Sandy  : DONE  -- populasi dan cross-over rate tinggi
@@ -820,6 +856,116 @@ class GeraldGA(BaseRoutingAlgorithm):
 
 
 # ──────────────────────────────────────────────────────────────
+# GERALD - Simulated Annealing untuk shortest path
+
+class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
+    """
+    Gerald - Simulated Annealing untuk mencari shortest path.
+
+    Objective utama = total distance (meter). Kandidat tetangga dibuat
+    dengan mengganti satu sub-rute memakai shortest path berbobot length
+    plus noise, lalu diterima memakai probabilitas annealing.
+    """
+    name        = "gerald_sa"
+    description = "Gerald - Simulated Annealing shortest path (distance)"
+
+    ITERATIONS          = 100
+    INITIAL_TEMPERATURE = 1200.0
+    COOLING_RATE        = 0.94
+    MIN_TEMPERATURE     = 0.01
+    RANDOM_SEED         = 31
+
+    def _fitness(self, G, path: list) -> float:
+        return _ga_path_distance(G, path)
+
+    @staticmethod
+    def _frame(G, gen_idx: int, best: list, candidate: list) -> dict:
+        coords = []
+        for n in best:
+            node = G.nodes.get(n)
+            if node:
+                coords.append([round(float(node["y"]), 5),
+                               round(float(node["x"]), 5)])
+
+        candidate_coords = []
+        for n in candidate:
+            node = G.nodes.get(n)
+            if node:
+                candidate_coords.append([round(float(node["y"]), 5),
+                                         round(float(node["x"]), 5)])
+
+        return {
+            "gen": gen_idx + 1,
+            "min": round(_ga_path_cost(G, best) / 60, 3),
+            "dist": round(_ga_path_distance(G, best) / 1000, 3),
+            "coords": coords,
+            "streets": _route_streets(G, best),
+            "candidate_min": round(_ga_path_cost(G, candidate) / 60, 3),
+            "candidate_dist": round(_ga_path_distance(G, candidate) / 1000, 3),
+            "candidate_coords": candidate_coords,
+            "candidate_streets": _route_streets(G, candidate),
+        }
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        t0 = time.perf_counter()
+        rng = random.Random(self.RANDOM_SEED)
+
+        current = _sa_noisy_shortest_path(G, source_node, target_node, rng)
+        if not current:
+            try:
+                current = nx.shortest_path(
+                    G, source_node, target_node, weight="length"
+                )
+            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+                ms = (time.perf_counter() - t0) * 1000
+                return RouteResult.failure(
+                    self.name, scenario_name, source_node, target_node, str(e), ms
+                )
+
+        best = current[:]
+        current_score = self._fitness(G, current)
+        best_score = current_score
+        temperature = self.INITIAL_TEMPERATURE
+        gen_history = []
+
+        for idx in range(self.ITERATIONS):
+            candidate = _sa_neighbor_path(G, current, rng)
+            candidate_score = self._fitness(G, candidate)
+            delta = candidate_score - current_score
+
+            accept = delta <= 0
+            if not accept and temperature > self.MIN_TEMPERATURE:
+                accept_prob = math.exp(-delta / temperature)
+                accept = rng.random() < accept_prob
+
+            if accept:
+                current = candidate
+                current_score = candidate_score
+
+            if current_score < best_score:
+                best = current[:]
+                best_score = current_score
+
+            gen_history.append(self._frame(G, idx, best, candidate))
+            temperature = max(self.MIN_TEMPERATURE,
+                              temperature * self.COOLING_RATE)
+
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name, source_node, target_node, best, ms,
+            metadata={
+                "algorithm_family": "simulated_annealing",
+                "generations": self.ITERATIONS,
+                "population": 1,
+                "initial_temperature": self.INITIAL_TEMPERATURE,
+                "cooling_rate": self.COOLING_RATE,
+                "min_temperature": self.MIN_TEMPERATURE,
+                "mutation_rate": 1.0,
+                "gen_history": gen_history,
+            },
+        )
+
+
 # EXAMPLE SCENARIOS
 # Rute konkret pakai fasilitas publik Surabaya beneran.
 # Dipakai benchmark sebagai gantinya auto-generate random.

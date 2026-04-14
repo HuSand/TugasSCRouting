@@ -1,0 +1,113 @@
+2026-04-14 16:26:18,694 [INFO] Surabaya Public Facility Routing Platform
+2026-04-14 16:26:18,694 [INFO] Place : Surabaya, Indonesia
+2026-04-14 16:26:18,694 [INFO] Data  : C:\Users\sandx\OneDrive\Documents\Univ\Semester 6\TugasSCRouting\data
+2026-04-14 16:26:18,694 [INFO] Logs  : C:\Users\sandx\OneDrive\Documents\Univ\Semester 6\TugasSCRouting\logs
+2026-04-14 16:26:18,694 [INFO] 
+2026-04-14 16:26:18,694 [INFO] ============================================================
+2026-04-14 16:26:18,695 [INFO] STEP: COMPARE
+2026-04-14 16:26:18,695 [INFO] ============================================================
+2026-04-14 16:26:21,364 [INFO] Loading road network and facilities...
+2026-04-14 16:26:26,446 [INFO] Graph: 36681 nodes  |  Facilities: 4081
+2026-04-14 16:26:26,446 [INFO] Registered algorithms (7):
+2026-04-14 16:26:26,447 [INFO]   [dijkstra_time]  Dijkstra — minimise travel time (fastest route)
+2026-04-14 16:26:26,447 [INFO]   [dijkstra_distance]  Dijkstra — minimise distance in metres (shortest path)
+2026-04-14 16:26:26,447 [INFO]   [astar_time]  A* — minimise travel time with haversine heuristic
+2026-04-14 16:26:26,447 [INFO]   [sandy_ga]  Sandy — GA (pop=50, gen=60, tour=5)
+2026-04-14 16:26:26,448 [INFO]   [burhan_ga]  Burhan — GA (belum dituning)
+2026-04-14 16:26:26,448 [INFO]   [bimo_ga]  Bimo — GA (belum dituning)
+2026-04-14 16:26:26,448 [INFO]   [gerald_ga]  Gerald — GA (belum dituning)
+2026-04-14 16:26:26,448 [INFO] 
+Building benchmark scenarios...
+2026-04-14 16:26:26,448 [INFO]   [darmo_to_rsu_haji]  RS Darmo -> RSU Haji Surabaya
+2026-04-14 16:26:26,449 [INFO]   [polsek_genteng_to_rs_darmo]  Polsek Genteng -> RS Darmo
+2026-04-14 16:26:26,449 [INFO]   [national_to_rs_ramelan]  National Hospital -> RS Angkatan Laut Dr. Ramelan
+2026-04-14 16:26:26,449 [INFO]   [polsek_rungkut_to_rs_onkologi]  Polsek Rungkut -> RS Onkologi
+2026-04-14 16:26:26,449 [INFO]   [ciputra_to_rsu_haji]  Ciputra Hospital -> RSU Haji Surabaya
+2026-04-14 16:26:26,449 [INFO] 
+Benchmark: 7 algorithms × 5 scenarios
+2026-04-14 16:26:26,449 [INFO] 
+  Scenario [darmo_to_rsu_haji]: RS Darmo -> RSU Haji Surabaya
+2026-04-14 16:26:26,466 [INFO]     OK    [dijkstra_time         ]  time= 10.0min  dist= 6.49km  cpu=  16.5ms
+2026-04-14 16:26:26,481 [INFO]     OK    [dijkstra_distance     ]  time= 11.3min  dist= 6.27km  cpu=  14.2ms
+2026-04-14 16:26:26,483 [INFO]     OK    [astar_time            ]  time= 10.4min  dist= 6.50km  cpu=   1.7ms
+2026-04-14 16:26:27,889 [INFO]     OK    [sandy_ga              ]  time= 10.0min  dist= 6.49km  cpu=1405.0ms
+2026-04-14 16:26:28,619 [INFO]     OK    [burhan_ga             ]  time= 10.0min  dist= 6.49km  cpu= 730.5ms
+2026-04-14 16:26:29,389 [INFO]     OK    [bimo_ga               ]  time= 10.0min  dist= 6.49km  cpu= 768.8ms
+2026-04-14 16:26:30,152 [INFO]     OK    [gerald_ga             ]  time= 10.0min  dist= 6.49km  cpu= 763.7ms
+2026-04-14 16:26:30,153 [INFO]     best: [dijkstra_time]
+2026-04-14 16:26:30,153 [INFO]     route [dijkstra_time]: Jalan Bintoro -> Jalan Taman Bintoro -> Jalan Taman Ketampon -> Jalan Cimanuk -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential
+2026-04-14 16:26:30,153 [INFO] 
+  Scenario [polsek_genteng_to_rs_darmo]: Polsek Genteng -> RS Darmo
+2026-04-14 16:26:30,158 [INFO]     OK    [dijkstra_time         ]  time=  5.3min  dist= 4.69km  cpu=   4.1ms
+2026-04-14 16:26:30,166 [INFO]     OK    [dijkstra_distance     ]  time=  6.9min  dist= 4.32km  cpu=   7.7ms
+2026-04-14 16:26:30,167 [INFO]     OK    [astar_time            ]  time=  6.0min  dist= 4.60km  cpu=   0.5ms
+2026-04-14 16:26:30,592 [INFO]     OK    [sandy_ga              ]  time=  5.3min  dist= 4.69km  cpu= 424.8ms
+2026-04-14 16:26:30,825 [INFO]     OK    [burhan_ga             ]  time=  5.3min  dist= 4.69km  cpu= 231.9ms
+2026-04-14 16:26:31,052 [INFO]     OK    [bimo_ga               ]  time=  5.3min  dist= 4.69km  cpu= 227.4ms
+2026-04-14 16:26:31,276 [INFO]     OK    [gerald_ga             ]  time=  5.3min  dist= 4.69km  cpu= 223.0ms
+2026-04-14 16:26:31,277 [INFO]     best: [dijkstra_time]
+2026-04-14 16:26:31,277 [INFO]     route [dijkstra_time]: Jalan Ambengan -> Jalan Kusuma Bangsa -> Jalan Anggrek -> Jalan Stasiun Gubeng -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe
+2026-04-14 16:26:31,277 [INFO] 
+  Scenario [national_to_rs_ramelan]: National Hospital -> RS Angkatan Laut Dr. Ramelan
+2026-04-14 16:26:31,310 [INFO]     OK    [dijkstra_time         ]  time= 14.0min  dist= 9.64km  cpu=  33.1ms
+2026-04-14 16:26:31,341 [INFO]     OK    [dijkstra_distance     ]  time= 15.3min  dist= 9.50km  cpu=  30.1ms
+2026-04-14 16:26:31,345 [INFO]     OK    [astar_time            ]  time= 14.0min  dist= 9.64km  cpu=   2.7ms
+2026-04-14 16:26:33,995 [INFO]     OK    [sandy_ga              ]  time= 14.0min  dist= 9.64km  cpu=2649.7ms
+2026-04-14 16:26:35,439 [INFO]     OK    [burhan_ga             ]  time= 14.0min  dist= 9.64km  cpu=1443.3ms
+2026-04-14 16:26:36,931 [INFO]     OK    [bimo_ga               ]  time= 14.0min  dist= 9.64km  cpu=1491.4ms
+2026-04-14 16:26:38,381 [INFO]     OK    [gerald_ga             ]  time= 14.0min  dist= 9.64km  cpu=1450.1ms
+2026-04-14 16:26:38,382 [INFO]     best: [dijkstra_time]
+2026-04-14 16:26:38,382 [INFO]     route [dijkstra_time]: Jalan Bukit Darmo Boulevard -> Jalan Raya Babatan Unesa -> Jalan Raya Menganti Babatan -> Jalan Raya Menganti -> Jalan Raya Wiyung -> Jalan Mastrip -> primary -> Jalan Prabu Siliwangi -> tertiary -> Jalan Raya Karah -> Jalan Ketintang Barat -> Jalan Ketintang -> Jalan Jetis Kulon -> Jalan Ahmad Yani -> Jalan Jenderal Achmad Yani -> Jalan Stasiun Wonokromo -> Jalan Wonokromo -> Jalan Jenderal Achmad Yani -> Jalan Bendul Merisi -> Jalan Jenderal Achmad Yani Frontage Timur -> Jalan Gadung
+2026-04-14 16:26:38,382 [INFO] 
+  Scenario [polsek_rungkut_to_rs_onkologi]: Polsek Rungkut -> RS Onkologi
+2026-04-14 16:26:38,395 [INFO]     OK    [dijkstra_time         ]  time= 12.9min  dist= 8.30km  cpu=  12.0ms
+2026-04-14 16:26:38,413 [INFO]     OK    [dijkstra_distance     ]  time= 13.7min  dist= 8.04km  cpu=  17.1ms
+2026-04-14 16:26:38,421 [INFO]     OK    [astar_time            ]  time= 12.9min  dist= 8.30km  cpu=   8.1ms
+2026-04-14 16:26:39,847 [INFO]     OK    [sandy_ga              ]  time= 12.9min  dist= 8.30km  cpu=1426.0ms
+2026-04-14 16:26:40,651 [INFO]     OK    [burhan_ga             ]  time= 12.9min  dist= 8.30km  cpu= 803.3ms
+2026-04-14 16:26:41,479 [INFO]     OK    [bimo_ga               ]  time= 12.9min  dist= 8.30km  cpu= 827.3ms
+2026-04-14 16:26:42,259 [INFO]     OK    [gerald_ga             ]  time= 12.9min  dist= 8.30km  cpu= 779.9ms
+2026-04-14 16:26:42,259 [INFO]     best: [dijkstra_time]
+2026-04-14 16:26:42,260 [INFO]     route [dijkstra_time]: Jalan Rungkut Barata II -> Jalan Rungkut Barata Raya -> Jalan Kyai Abdul Karim -> Jalan Rungkut Menanggal Harapan Blok S -> Jalan Rungkut Mapan Selatan -> Jalan Raya Rungkut Mapan -> Jalan Rungkut Madya -> secondary_link -> Jalan Doktor Insinyur Haji Soekarno -> Jalan Arief Rahman Hakim -> residential -> Jalan Puri Sukolilo Barat II
+2026-04-14 16:26:42,260 [INFO] 
+  Scenario [ciputra_to_rsu_haji]: Ciputra Hospital -> RSU Haji Surabaya
+2026-04-14 16:26:42,351 [INFO]     OK    [dijkstra_time         ]  time= 27.2min  dist=18.34km  cpu=  90.2ms
+2026-04-14 16:26:42,446 [INFO]     OK    [dijkstra_distance     ]  time= 27.7min  dist=18.30km  cpu=  94.0ms
+2026-04-14 16:26:42,452 [INFO]     OK    [astar_time            ]  time= 27.2min  dist=18.34km  cpu=   4.8ms
+2026-04-14 16:26:50,095 [INFO]     OK    [sandy_ga              ]  time= 27.2min  dist=18.34km  cpu=7642.8ms
+2026-04-14 16:26:54,368 [INFO]     OK    [burhan_ga             ]  time= 27.2min  dist=18.34km  cpu=4272.6ms
+2026-04-14 16:26:58,648 [INFO]     OK    [bimo_ga               ]  time= 27.2min  dist=18.34km  cpu=4279.0ms
+2026-04-14 16:27:03,007 [INFO]     OK    [gerald_ga             ]  time= 27.2min  dist=18.34km  cpu=4359.1ms
+2026-04-14 16:27:03,008 [INFO]     best: [dijkstra_time]
+2026-04-14 16:27:03,008 [INFO]     route [dijkstra_time]: Jalan Citra Raya Niaga -> secondary -> Jalan Citra Raya Niaga -> tertiary -> Jalan Mayor Jenderal Jonosewojo -> Jalan Mayor Jenderal HR. Muhammad -> Jalan HR. Muhammad -> Jalan Mayor Jenderal HR. Muhammad -> Jalan Mayjend Sungkono -> Jalan Mayor Jenderal Sungkono -> Jalan Mayjend Sungkono -> Jalan Adityawarman -> Jalan Kutai -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential
+2026-04-14 16:27:03,016 [INFO] 
+BENCHMARK SUMMARY
+============================================================
+                   solved  avg_time_min  avg_dist_km  avg_cpu_ms  best_time_min  worst_time_min
+algorithm                                                                                      
+astar_time              5        14.109        9.477       3.573          6.011          27.155
+bimo_ga                 5        13.892        9.494    1518.769          5.291          27.155
+burhan_ga               5        13.892        9.494    1496.319          5.291          27.155
+dijkstra_distance       5        15.003        9.285      32.643          6.909          27.730
+dijkstra_time           5        13.892        9.494      31.186          5.291          27.155
+gerald_ga               5        13.892        9.494    1515.134          5.291          27.155
+sandy_ga                5        13.892        9.494    2709.644          5.291          27.155
+2026-04-14 16:27:03,020 [INFO] Saved -> comparison_results.csv
+2026-04-14 16:27:03,022 [INFO] Saved -> comparison_summary.csv
+2026-04-14 16:27:03,022 [INFO] 
+Generating visualisations...
+2026-04-14 16:27:03,033 [INFO]   Map -> comparison_map_darmo_to_rsu_haji.html  (0 routes drawn)
+2026-04-14 16:27:03,040 [INFO]   Map -> comparison_map_polsek_genteng_to_rs_darmo.html  (0 routes drawn)
+2026-04-14 16:27:03,048 [INFO]   Map -> comparison_map_national_to_rs_ramelan.html  (0 routes drawn)
+2026-04-14 16:27:03,057 [INFO]   Map -> comparison_map_polsek_rungkut_to_rs_onkologi.html  (0 routes drawn)
+2026-04-14 16:27:03,067 [INFO]   Map -> comparison_map_ciputra_to_rsu_haji.html  (0 routes drawn)
+2026-04-14 16:27:03,433 [INFO]   Chart -> comparison_chart.png
+2026-04-14 16:27:03,434 [INFO] 
+Outputs in data/:
+2026-04-14 16:27:03,434 [INFO]   comparison_results.csv    raw results per algorithm/scenario
+2026-04-14 16:27:03,434 [INFO]   comparison_summary.csv    aggregate stats per algorithm
+2026-04-14 16:27:03,434 [INFO]   comparison_chart.png      travel time + speed bar charts
+2026-04-14 16:27:03,435 [INFO]   comparison_map_*.html     route overlay maps (open in browser)
+2026-04-14 16:27:03,435 [INFO] [compare] finished in 44.7s
+2026-04-14 16:27:03,436 [INFO] 
+2026-04-14 16:27:03,436 [INFO] All done in 44.7s

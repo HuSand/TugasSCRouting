@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_e8fbe348d84302849968f2d49426a651 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    <div style='position:fixed;bottom:30px;left:30px;z-index:9999;background:white;padding:10px 14px;border-radius:6px;border:1px solid #ccc;font-size:12px;line-height:1.9;max-width:260px;'><b>RS Darmo</b><br>-> <b>RSU Haji Surabaya</b><br><hr style='margin:4px 0'><span style='color:#E63946;font-size:18px;'>&#9644;</span> <b>dijkstra_time</b> &nbsp;10.0min &nbsp;6.49km<br><span style='color:#2196F3;font-size:18px;'>&#9644;</span> <b>dijkstra_distance</b> &nbsp;11.3min &nbsp;6.27km<br><span style='color:#4CAF50;font-size:18px;'>&#9644;</span> <b>astar_time</b> &nbsp;10.4min &nbsp;6.50km<br><span style='color:#FF9800;font-size:18px;'>&#9644;</span> <b>sandy_ga</b> &nbsp;10.0min &nbsp;6.49km<br><span style='color:#9C27B0;font-size:18px;'>&#9644;</span> <b>burhan_ga</b> &nbsp;10.0min &nbsp;6.49km<br><span style='color:#00BCD4;font-size:18px;'>&#9644;</span> <b>bimo_ga</b> &nbsp;10.0min &nbsp;6.49km<br><span style='color:#FF5722;font-size:18px;'>&#9644;</span> <b>gerald_ga</b> &nbsp;10.0min &nbsp;6.49km<br><hr style='margin:4px 0'><small>Klik rute untuk detail nama jalan</small></div>
+    
+            <div class="folium-map" id="map_e8fbe348d84302849968f2d49426a651" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_e8fbe348d84302849968f2d49426a651 = L.map(
+                "map_e8fbe348d84302849968f2d49426a651",
+                {
+                    center: [-7.2874, 112.7382],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 14,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_569a5ccd31fcb1a2fe18371f6aa3130d = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_569a5ccd31fcb1a2fe18371f6aa3130d.addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+            var poly_line_361b3c098346358e5cb19a80b28e8fc3 = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.286014, 112.7378391], [-7.2859886, 112.737409], [-7.2861167, 112.737094], [-7.2879021, 112.7370027], [-7.2886604, 112.737118], [-7.2898328, 112.7374646], [-7.2897738, 112.7389137], [-7.2897944, 112.739066], [-7.2902942, 112.7410036], [-7.2903703, 112.7410837], [-7.2909646, 112.7422768], [-7.2909633, 112.7423326], [-7.2913056, 112.7429739], [-7.2909797, 112.7431523], [-7.2905647, 112.7434313], [-7.2903725, 112.7435628], [-7.2889844, 112.7446493], [-7.2889087, 112.7447128], [-7.2877982, 112.745681], [-7.2869317, 112.7463663], [-7.2830812, 112.7472943], [-7.2834236, 112.7489886], [-7.2835434, 112.7494758], [-7.2835597, 112.7495312], [-7.2838013, 112.750301], [-7.2838833, 112.7506579], [-7.2839319, 112.7508516], [-7.2843139, 112.7509541], [-7.2843152, 112.7513755], [-7.2843173, 112.7520555], [-7.2843186, 112.7525014], [-7.2843118, 112.7530466], [-7.2843022, 112.754223], [-7.2842945, 112.7552565], [-7.2842953, 112.7557653], [-7.2842943, 112.7559013], [-7.284319, 112.7575944], [-7.284327, 112.7579897], [-7.2843291, 112.7586685], [-7.2843159, 112.7590611], [-7.284331, 112.7600544], [-7.2836772, 112.7600531], [-7.2836902, 112.7604368], [-7.2836917, 112.7609446], [-7.2837033, 112.7616555], [-7.2836974, 112.7621136], [-7.2836916, 112.762246], [-7.282176, 112.7621397], [-7.2821549, 112.762201], [-7.2823822, 112.7637456], [-7.2824267, 112.7648836], [-7.2824187, 112.7652597], [-7.2822967, 112.7662548], [-7.2822516, 112.7671181], [-7.2821939, 112.7680445], [-7.2821739, 112.76834], [-7.2820679, 112.7695758], [-7.2820327, 112.7702489], [-7.2820215, 112.7704686], [-7.2819625, 112.7711352], [-7.2819561, 112.7718565], [-7.2819553, 112.7733569], [-7.2819265, 112.7736353], [-7.2821863, 112.7757376], [-7.282269, 112.7764624], [-7.282111, 112.7764505], [-7.281949, 112.7764433], [-7.2813933, 112.7764388], [-7.2808834, 112.7764558], [-7.2808836, 112.7765599], [-7.2813586, 112.7765554], [-7.281858, 112.7765465], [-7.2821141, 112.7765364], [-7.2822684, 112.7765333], [-7.2823, 112.7769951], [-7.282291, 112.7784021], [-7.2821947, 112.7793259], [-7.2821715, 112.7795494], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#E63946", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#E63946", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_7ebb7eb4112f002f59e5de2b622fd274 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_8b17d2bed716c75800afd176fb1a781b = $(`<div id="html_8b17d2bed716c75800afd176fb1a781b" style="width: 100.0%; height: 100.0%;"><b>dijkstra_time</b><br>Waktu : 10.0 menit<br>Jarak : 6.49 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Bintoro -> Jalan Taman Bintoro -> Jalan Taman Ketampon -> Jalan Cimanuk -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential</small></div>`)[0];
+                popup_7ebb7eb4112f002f59e5de2b622fd274.setContent(html_8b17d2bed716c75800afd176fb1a781b);
+            
+        
+
+        poly_line_361b3c098346358e5cb19a80b28e8fc3.bindPopup(popup_7ebb7eb4112f002f59e5de2b622fd274)
+        ;
+
+        
+    
+    
+            poly_line_361b3c098346358e5cb19a80b28e8fc3.bindTooltip(
+                `<div>
+                     dijkstra_time | 10.0min | 6.49km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_db6ddccf13c71ea3b3123acabc44daa9 = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.2850425, 112.7386045], [-7.2833237, 112.7389658], [-7.282869, 112.7401827], [-7.2814414, 112.7404428], [-7.2812657, 112.7404783], [-7.2811851, 112.7406594], [-7.2808526, 112.7413846], [-7.2805909, 112.7419421], [-7.2792652, 112.7421823], [-7.2788604, 112.7431348], [-7.2786726, 112.7435593], [-7.2778094, 112.7432139], [-7.2777064, 112.7431843], [-7.2775612, 112.7431872], [-7.2774394, 112.7431863], [-7.2772965, 112.7438431], [-7.2771364, 112.7442903], [-7.2768106, 112.7451286], [-7.2767543, 112.7452749], [-7.2762216, 112.7461997], [-7.2753788, 112.7464588], [-7.2744742, 112.7467686], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2772398, 112.7502004], [-7.2773112, 112.7507656], [-7.2773253, 112.7508466], [-7.2774935, 112.7518102], [-7.2775811, 112.7523122], [-7.277897, 112.7541295], [-7.2779821, 112.7546246], [-7.2781821, 112.7557821], [-7.2782034, 112.7558957], [-7.2783786, 112.7569024], [-7.278464, 112.7573946], [-7.2787467, 112.7591908], [-7.2789025, 112.7601988], [-7.2790365, 112.7609917], [-7.2791231, 112.7615106], [-7.2791621, 112.7617336], [-7.2792752, 112.7622434], [-7.2792884, 112.7623118], [-7.2794646, 112.7622858], [-7.2799686, 112.7622551], [-7.280232, 112.7640817], [-7.2805538, 112.764103], [-7.2808356, 112.7663581], [-7.281098, 112.768623], [-7.2808854, 112.7686659], [-7.2813859, 112.7719445], [-7.2814356, 112.7719432], [-7.2819553, 112.7733569], [-7.2819265, 112.7736353], [-7.2821863, 112.7757376], [-7.282269, 112.7764624], [-7.282111, 112.7764505], [-7.281949, 112.7764433], [-7.2813933, 112.7764388], [-7.2808834, 112.7764558], [-7.2808836, 112.7765599], [-7.2813586, 112.7765554], [-7.281858, 112.7765465], [-7.2821141, 112.7765364], [-7.2822684, 112.7765333], [-7.2823, 112.7769951], [-7.282291, 112.7784021], [-7.2821947, 112.7793259], [-7.2821715, 112.7795494], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#2196F3", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#2196F3", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_b1466ae17c3d293aa0b531455f40f5e6 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_4356bbc91a3b8796c398505e43ddfe3b = $(`<div id="html_4356bbc91a3b8796c398505e43ddfe3b" style="width: 100.0%; height: 100.0%;"><b>dijkstra_distance</b><br>Waktu : 11.3 menit<br>Jarak : 6.27 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ronggolawe -> Jalan Mojopahit -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Moehammad Jasin Polisi Istimewa -> Jalan Sriwijaya -> Jalan Pajajaran -> Jalan Sunda -> secondary -> Jalan Pasar Keputran -> Jalan Raya Gubeng -> Jalan Bali -> Jalan Biliton -> Jalan Kertajaya -> Jalan Manyar Kertoarjo -> Jalan Raya Menur -> Jalan Manyar Sabrangan Gang I -> Jalan Manyar Kertoarjo I -> Jalan Manyar Kertoarjo III -> Jalan Manyar Kertoarjo I -> Jalan Manyar Kertoarjo III -> Jalan Raya Manyar Tirtoyoso -> Gang Pesantren -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential</small></div>`)[0];
+                popup_b1466ae17c3d293aa0b531455f40f5e6.setContent(html_4356bbc91a3b8796c398505e43ddfe3b);
+            
+        
+
+        poly_line_db6ddccf13c71ea3b3123acabc44daa9.bindPopup(popup_b1466ae17c3d293aa0b531455f40f5e6)
+        ;
+
+        
+    
+    
+            poly_line_db6ddccf13c71ea3b3123acabc44daa9.bindTooltip(
+                `<div>
+                     dijkstra_distance | 11.3min | 6.27km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_b82910d39a2bab9940bd6f0501f1fe12 = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.2850425, 112.7386045], [-7.2833237, 112.7389658], [-7.282869, 112.7401827], [-7.2814414, 112.7404428], [-7.2812657, 112.7404783], [-7.2811851, 112.7406594], [-7.2808526, 112.7413846], [-7.2805909, 112.7419421], [-7.2803302, 112.7425146], [-7.2802537, 112.7426787], [-7.279704, 112.7439658], [-7.2793804, 112.7438309], [-7.2786726, 112.7435593], [-7.2778094, 112.7432139], [-7.2777064, 112.7431843], [-7.2775612, 112.7431872], [-7.2774394, 112.7431863], [-7.2772965, 112.7438431], [-7.2771364, 112.7442903], [-7.2768106, 112.7451286], [-7.2767543, 112.7452749], [-7.2762216, 112.7461997], [-7.2753788, 112.7464588], [-7.2744742, 112.7467686], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2772398, 112.7502004], [-7.2773112, 112.7507656], [-7.2773253, 112.7508466], [-7.2774935, 112.7518102], [-7.2775811, 112.7523122], [-7.277897, 112.7541295], [-7.2779821, 112.7546246], [-7.2781821, 112.7557821], [-7.2782034, 112.7558957], [-7.2783786, 112.7569024], [-7.278464, 112.7573946], [-7.2787467, 112.7591908], [-7.2789025, 112.7601988], [-7.2790365, 112.7609917], [-7.2791231, 112.7615106], [-7.2791621, 112.7617336], [-7.2792752, 112.7622434], [-7.2792884, 112.7623118], [-7.2793819, 112.7628769], [-7.279601, 112.7643324], [-7.2797473, 112.765549], [-7.279762, 112.7656475], [-7.2798603, 112.7663957], [-7.2798735, 112.766536], [-7.2799379, 112.7672219], [-7.2802085, 112.7698205], [-7.2802127, 112.7698627], [-7.2802179, 112.7699379], [-7.2803603, 112.7720679], [-7.2803836, 112.7722857], [-7.2804141, 112.7743322], [-7.2804166, 112.7744257], [-7.2804178, 112.7745179], [-7.2804554, 112.776445], [-7.2804572, 112.7765482], [-7.2804796, 112.7786475], [-7.2804792, 112.7786976], [-7.2804782, 112.7788354], [-7.2804811, 112.7788787], [-7.280517, 112.7808237], [-7.2805031, 112.7809621], [-7.2806967, 112.7809637], [-7.2819821, 112.7809692], [-7.2820933, 112.7809692], [-7.2829768, 112.7809513], [-7.2829768, 112.7808105], [-7.2821371, 112.7808042], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#4CAF50", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#4CAF50", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_3ac624de0363e6ff29469464555fc31e = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_99cfe7910f83eed8931e9f6e57f87fc5 = $(`<div id="html_99cfe7910f83eed8931e9f6e57f87fc5" style="width: 100.0%; height: 100.0%;"><b>astar_time</b><br>Waktu : 10.4 menit<br>Jarak : 6.50 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ronggolawe -> Jalan Mojopahit -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Moehammad Jasin Polisi Istimewa -> Jalan Sunda -> secondary -> Jalan Pasar Keputran -> Jalan Raya Gubeng -> Jalan Bali -> Jalan Biliton -> Jalan Kertajaya -> Jalan Manyar Kertoarjo -> Jalan Raya Kertajaya Indah -> Jalan Doktor Insinyur Haji Soekarno -> secondary_link -> Jalan Doktor Insinyur Haji Soekarno -> Jalan Raya Manyar Kertoadi</small></div>`)[0];
+                popup_3ac624de0363e6ff29469464555fc31e.setContent(html_99cfe7910f83eed8931e9f6e57f87fc5);
+            
+        
+
+        poly_line_b82910d39a2bab9940bd6f0501f1fe12.bindPopup(popup_3ac624de0363e6ff29469464555fc31e)
+        ;
+
+        
+    
+    
+            poly_line_b82910d39a2bab9940bd6f0501f1fe12.bindTooltip(
+                `<div>
+                     astar_time | 10.4min | 6.50km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_604b8cc0b0477b280760501c55ce6f81 = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.286014, 112.7378391], [-7.2859886, 112.737409], [-7.2861167, 112.737094], [-7.2879021, 112.7370027], [-7.2886604, 112.737118], [-7.2898328, 112.7374646], [-7.2897738, 112.7389137], [-7.2897944, 112.739066], [-7.2902942, 112.7410036], [-7.2903703, 112.7410837], [-7.2909646, 112.7422768], [-7.2909633, 112.7423326], [-7.2913056, 112.7429739], [-7.2909797, 112.7431523], [-7.2905647, 112.7434313], [-7.2903725, 112.7435628], [-7.2889844, 112.7446493], [-7.2889087, 112.7447128], [-7.2877982, 112.745681], [-7.2869317, 112.7463663], [-7.2830812, 112.7472943], [-7.2834236, 112.7489886], [-7.2835434, 112.7494758], [-7.2835597, 112.7495312], [-7.2838013, 112.750301], [-7.2838833, 112.7506579], [-7.2839319, 112.7508516], [-7.2843139, 112.7509541], [-7.2843152, 112.7513755], [-7.2843173, 112.7520555], [-7.2843186, 112.7525014], [-7.2843118, 112.7530466], [-7.2843022, 112.754223], [-7.2842945, 112.7552565], [-7.2842953, 112.7557653], [-7.2842943, 112.7559013], [-7.284319, 112.7575944], [-7.284327, 112.7579897], [-7.2843291, 112.7586685], [-7.2843159, 112.7590611], [-7.284331, 112.7600544], [-7.2836772, 112.7600531], [-7.2836902, 112.7604368], [-7.2836917, 112.7609446], [-7.2837033, 112.7616555], [-7.2836974, 112.7621136], [-7.2836916, 112.762246], [-7.282176, 112.7621397], [-7.2821549, 112.762201], [-7.2823822, 112.7637456], [-7.2824267, 112.7648836], [-7.2824187, 112.7652597], [-7.2822967, 112.7662548], [-7.2822516, 112.7671181], [-7.2821939, 112.7680445], [-7.2821739, 112.76834], [-7.2820679, 112.7695758], [-7.2820327, 112.7702489], [-7.2820215, 112.7704686], [-7.2819625, 112.7711352], [-7.2819561, 112.7718565], [-7.2819553, 112.7733569], [-7.2819265, 112.7736353], [-7.2821863, 112.7757376], [-7.282269, 112.7764624], [-7.282111, 112.7764505], [-7.281949, 112.7764433], [-7.2813933, 112.7764388], [-7.2808834, 112.7764558], [-7.2808836, 112.7765599], [-7.2813586, 112.7765554], [-7.281858, 112.7765465], [-7.2821141, 112.7765364], [-7.2822684, 112.7765333], [-7.2823, 112.7769951], [-7.282291, 112.7784021], [-7.2821947, 112.7793259], [-7.2821715, 112.7795494], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#FF9800", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#FF9800", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_6d6d2485778960c4991605954dd240a3 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_78bf356d38ff5531205fe283fa07e3e0 = $(`<div id="html_78bf356d38ff5531205fe283fa07e3e0" style="width: 100.0%; height: 100.0%;"><b>sandy_ga</b><br>Waktu : 10.0 menit<br>Jarak : 6.49 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Bintoro -> Jalan Taman Bintoro -> Jalan Taman Ketampon -> Jalan Cimanuk -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential</small></div>`)[0];
+                popup_6d6d2485778960c4991605954dd240a3.setContent(html_78bf356d38ff5531205fe283fa07e3e0);
+            
+        
+
+        poly_line_604b8cc0b0477b280760501c55ce6f81.bindPopup(popup_6d6d2485778960c4991605954dd240a3)
+        ;
+
+        
+    
+    
+            poly_line_604b8cc0b0477b280760501c55ce6f81.bindTooltip(
+                `<div>
+                     sandy_ga | 10.0min | 6.49km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2ab44c2f9b0023b62cc3eab2e0e2d6e4 = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.286014, 112.7378391], [-7.2859886, 112.737409], [-7.2861167, 112.737094], [-7.2879021, 112.7370027], [-7.2886604, 112.737118], [-7.2898328, 112.7374646], [-7.2897738, 112.7389137], [-7.2897944, 112.739066], [-7.2902942, 112.7410036], [-7.2903703, 112.7410837], [-7.2909646, 112.7422768], [-7.2909633, 112.7423326], [-7.2913056, 112.7429739], [-7.2909797, 112.7431523], [-7.2905647, 112.7434313], [-7.2903725, 112.7435628], [-7.2889844, 112.7446493], [-7.2889087, 112.7447128], [-7.2877982, 112.745681], [-7.2869317, 112.7463663], [-7.2830812, 112.7472943], [-7.2834236, 112.7489886], [-7.2835434, 112.7494758], [-7.2835597, 112.7495312], [-7.2838013, 112.750301], [-7.2838833, 112.7506579], [-7.2839319, 112.7508516], [-7.2843139, 112.7509541], [-7.2843152, 112.7513755], [-7.2843173, 112.7520555], [-7.2843186, 112.7525014], [-7.2843118, 112.7530466], [-7.2843022, 112.754223], [-7.2842945, 112.7552565], [-7.2842953, 112.7557653], [-7.2842943, 112.7559013], [-7.284319, 112.7575944], [-7.284327, 112.7579897], [-7.2843291, 112.7586685], [-7.2843159, 112.7590611], [-7.284331, 112.7600544], [-7.2836772, 112.7600531], [-7.2836902, 112.7604368], [-7.2836917, 112.7609446], [-7.2837033, 112.7616555], [-7.2836974, 112.7621136], [-7.2836916, 112.762246], [-7.282176, 112.7621397], [-7.2821549, 112.762201], [-7.2823822, 112.7637456], [-7.2824267, 112.7648836], [-7.2824187, 112.7652597], [-7.2822967, 112.7662548], [-7.2822516, 112.7671181], [-7.2821939, 112.7680445], [-7.2821739, 112.76834], [-7.2820679, 112.7695758], [-7.2820327, 112.7702489], [-7.2820215, 112.7704686], [-7.2819625, 112.7711352], [-7.2819561, 112.7718565], [-7.2819553, 112.7733569], [-7.2819265, 112.7736353], [-7.2821863, 112.7757376], [-7.282269, 112.7764624], [-7.282111, 112.7764505], [-7.281949, 112.7764433], [-7.2813933, 112.7764388], [-7.2808834, 112.7764558], [-7.2808836, 112.7765599], [-7.2813586, 112.7765554], [-7.281858, 112.7765465], [-7.2821141, 112.7765364], [-7.2822684, 112.7765333], [-7.2823, 112.7769951], [-7.282291, 112.7784021], [-7.2821947, 112.7793259], [-7.2821715, 112.7795494], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#9C27B0", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#9C27B0", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_9ca9beba740f5df594cdcbbf308eb8e4 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_d4a355cac2826a876ec6d26b0411d58d = $(`<div id="html_d4a355cac2826a876ec6d26b0411d58d" style="width: 100.0%; height: 100.0%;"><b>burhan_ga</b><br>Waktu : 10.0 menit<br>Jarak : 6.49 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Bintoro -> Jalan Taman Bintoro -> Jalan Taman Ketampon -> Jalan Cimanuk -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential</small></div>`)[0];
+                popup_9ca9beba740f5df594cdcbbf308eb8e4.setContent(html_d4a355cac2826a876ec6d26b0411d58d);
+            
+        
+
+        poly_line_2ab44c2f9b0023b62cc3eab2e0e2d6e4.bindPopup(popup_9ca9beba740f5df594cdcbbf308eb8e4)
+        ;
+
+        
+    
+    
+            poly_line_2ab44c2f9b0023b62cc3eab2e0e2d6e4.bindTooltip(
+                `<div>
+                     burhan_ga | 10.0min | 6.49km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e0b2530083c2a2aaf808ca4650e86e86 = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.286014, 112.7378391], [-7.2859886, 112.737409], [-7.2861167, 112.737094], [-7.2879021, 112.7370027], [-7.2886604, 112.737118], [-7.2898328, 112.7374646], [-7.2897738, 112.7389137], [-7.2897944, 112.739066], [-7.2902942, 112.7410036], [-7.2903703, 112.7410837], [-7.2909646, 112.7422768], [-7.2909633, 112.7423326], [-7.2913056, 112.7429739], [-7.2909797, 112.7431523], [-7.2905647, 112.7434313], [-7.2903725, 112.7435628], [-7.2889844, 112.7446493], [-7.2889087, 112.7447128], [-7.2877982, 112.745681], [-7.2869317, 112.7463663], [-7.2830812, 112.7472943], [-7.2834236, 112.7489886], [-7.2835434, 112.7494758], [-7.2835597, 112.7495312], [-7.2838013, 112.750301], [-7.2838833, 112.7506579], [-7.2839319, 112.7508516], [-7.2843139, 112.7509541], [-7.2843152, 112.7513755], [-7.2843173, 112.7520555], [-7.2843186, 112.7525014], [-7.2843118, 112.7530466], [-7.2843022, 112.754223], [-7.2842945, 112.7552565], [-7.2842953, 112.7557653], [-7.2842943, 112.7559013], [-7.284319, 112.7575944], [-7.284327, 112.7579897], [-7.2843291, 112.7586685], [-7.2843159, 112.7590611], [-7.284331, 112.7600544], [-7.2836772, 112.7600531], [-7.2836902, 112.7604368], [-7.2836917, 112.7609446], [-7.2837033, 112.7616555], [-7.2836974, 112.7621136], [-7.2836916, 112.762246], [-7.282176, 112.7621397], [-7.2821549, 112.762201], [-7.2823822, 112.7637456], [-7.2824267, 112.7648836], [-7.2824187, 112.7652597], [-7.2822967, 112.7662548], [-7.2822516, 112.7671181], [-7.2821939, 112.7680445], [-7.2821739, 112.76834], [-7.2820679, 112.7695758], [-7.2820327, 112.7702489], [-7.2820215, 112.7704686], [-7.2819625, 112.7711352], [-7.2819561, 112.7718565], [-7.2819553, 112.7733569], [-7.2819265, 112.7736353], [-7.2821863, 112.7757376], [-7.282269, 112.7764624], [-7.282111, 112.7764505], [-7.281949, 112.7764433], [-7.2813933, 112.7764388], [-7.2808834, 112.7764558], [-7.2808836, 112.7765599], [-7.2813586, 112.7765554], [-7.281858, 112.7765465], [-7.2821141, 112.7765364], [-7.2822684, 112.7765333], [-7.2823, 112.7769951], [-7.282291, 112.7784021], [-7.2821947, 112.7793259], [-7.2821715, 112.7795494], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#00BCD4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#00BCD4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_a14253b07d97febb5ea6ec1eac97b377 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_ac83b96fa268e011764bed01d67c5c2f = $(`<div id="html_ac83b96fa268e011764bed01d67c5c2f" style="width: 100.0%; height: 100.0%;"><b>bimo_ga</b><br>Waktu : 10.0 menit<br>Jarak : 6.49 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Bintoro -> Jalan Taman Bintoro -> Jalan Taman Ketampon -> Jalan Cimanuk -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential</small></div>`)[0];
+                popup_a14253b07d97febb5ea6ec1eac97b377.setContent(html_ac83b96fa268e011764bed01d67c5c2f);
+            
+        
+
+        poly_line_e0b2530083c2a2aaf808ca4650e86e86.bindPopup(popup_a14253b07d97febb5ea6ec1eac97b377)
+        ;
+
+        
+    
+    
+            poly_line_e0b2530083c2a2aaf808ca4650e86e86.bindTooltip(
+                `<div>
+                     bimo_ga | 10.0min | 6.49km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_5321c671329b819e1c25230f6877150e = L.polyline(
+                [[-7.2860876, 112.7384791], [-7.286014, 112.7378391], [-7.2859886, 112.737409], [-7.2861167, 112.737094], [-7.2879021, 112.7370027], [-7.2886604, 112.737118], [-7.2898328, 112.7374646], [-7.2897738, 112.7389137], [-7.2897944, 112.739066], [-7.2902942, 112.7410036], [-7.2903703, 112.7410837], [-7.2909646, 112.7422768], [-7.2909633, 112.7423326], [-7.2913056, 112.7429739], [-7.2909797, 112.7431523], [-7.2905647, 112.7434313], [-7.2903725, 112.7435628], [-7.2889844, 112.7446493], [-7.2889087, 112.7447128], [-7.2877982, 112.745681], [-7.2869317, 112.7463663], [-7.2830812, 112.7472943], [-7.2834236, 112.7489886], [-7.2835434, 112.7494758], [-7.2835597, 112.7495312], [-7.2838013, 112.750301], [-7.2838833, 112.7506579], [-7.2839319, 112.7508516], [-7.2843139, 112.7509541], [-7.2843152, 112.7513755], [-7.2843173, 112.7520555], [-7.2843186, 112.7525014], [-7.2843118, 112.7530466], [-7.2843022, 112.754223], [-7.2842945, 112.7552565], [-7.2842953, 112.7557653], [-7.2842943, 112.7559013], [-7.284319, 112.7575944], [-7.284327, 112.7579897], [-7.2843291, 112.7586685], [-7.2843159, 112.7590611], [-7.284331, 112.7600544], [-7.2836772, 112.7600531], [-7.2836902, 112.7604368], [-7.2836917, 112.7609446], [-7.2837033, 112.7616555], [-7.2836974, 112.7621136], [-7.2836916, 112.762246], [-7.282176, 112.7621397], [-7.2821549, 112.762201], [-7.2823822, 112.7637456], [-7.2824267, 112.7648836], [-7.2824187, 112.7652597], [-7.2822967, 112.7662548], [-7.2822516, 112.7671181], [-7.2821939, 112.7680445], [-7.2821739, 112.76834], [-7.2820679, 112.7695758], [-7.2820327, 112.7702489], [-7.2820215, 112.7704686], [-7.2819625, 112.7711352], [-7.2819561, 112.7718565], [-7.2819553, 112.7733569], [-7.2819265, 112.7736353], [-7.2821863, 112.7757376], [-7.282269, 112.7764624], [-7.282111, 112.7764505], [-7.281949, 112.7764433], [-7.2813933, 112.7764388], [-7.2808834, 112.7764558], [-7.2808836, 112.7765599], [-7.2813586, 112.7765554], [-7.281858, 112.7765465], [-7.2821141, 112.7765364], [-7.2822684, 112.7765333], [-7.2823, 112.7769951], [-7.282291, 112.7784021], [-7.2821947, 112.7793259], [-7.2821715, 112.7795494], [-7.2822751, 112.7795264]],
+                {"bubblingMouseEvents": true, "color": "#FF5722", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#FF5722", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+        var popup_1e55d23f0eaab1e95a5b0e02c30f01f5 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_296238f1a09bffcde0970a1ced8132c4 = $(`<div id="html_296238f1a09bffcde0970a1ced8132c4" style="width: 100.0%; height: 100.0%;"><b>gerald_ga</b><br>Waktu : 10.0 menit<br>Jarak : 6.49 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Bintoro -> Jalan Taman Bintoro -> Jalan Taman Ketampon -> Jalan Cimanuk -> Jalan Bengawan -> Jalan Ngagel -> Jalan Kalibokor I -> Jalan Pucang Sewu -> Jalan Pucang Anom -> Jalan Pucang Jajar -> Jalan Pucang Jajar Tengah -> Jalan Raya Menur -> Jalan Manyar Dukuh -> Jalan Manyar Sabrangan -> Jalan Manyar Dukuh -> Jalan Mleto -> Jalan Kertajaya Indah Tengah -> tertiary_link -> Jalan Kertajaya Indah Tengah -> Jalan Raya Manyar Kertoadi -> residential</small></div>`)[0];
+                popup_1e55d23f0eaab1e95a5b0e02c30f01f5.setContent(html_296238f1a09bffcde0970a1ced8132c4);
+            
+        
+
+        poly_line_5321c671329b819e1c25230f6877150e.bindPopup(popup_1e55d23f0eaab1e95a5b0e02c30f01f5)
+        ;
+
+        
+    
+    
+            poly_line_5321c671329b819e1c25230f6877150e.bindTooltip(
+                `<div>
+                     gerald_ga | 10.0min | 6.49km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_da5ea4c30692c33b385898be041bc428 = L.marker(
+                [-7.2874, 112.7382],
+                {
+}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+            var icon_19cbb296032b9b6f670055053dd6fe7c = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "green",
+  "iconColor": "white",
+  "icon": "play",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_dd1a34e7849039ab3fb6ebdcd462f86c = L.popup({
+  "maxWidth": 200,
+});
+
+        
+            
+                var html_3fbcfc614dac4467f9b2125ee4af84ef = $(`<div id="html_3fbcfc614dac4467f9b2125ee4af84ef" style="width: 100.0%; height: 100.0%;"><b>FROM</b><br>RS Darmo</div>`)[0];
+                popup_dd1a34e7849039ab3fb6ebdcd462f86c.setContent(html_3fbcfc614dac4467f9b2125ee4af84ef);
+            
+        
+
+        marker_da5ea4c30692c33b385898be041bc428.bindPopup(popup_dd1a34e7849039ab3fb6ebdcd462f86c)
+        ;
+
+        
+    
+    
+            marker_da5ea4c30692c33b385898be041bc428.bindTooltip(
+                `<div>
+                     START: RS Darmo
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_da5ea4c30692c33b385898be041bc428.setIcon(icon_19cbb296032b9b6f670055053dd6fe7c);
+            
+    
+            var marker_432442197db763d777c3bdf227466b95 = L.marker(
+                [-7.2828, 112.7798],
+                {
+}
+            ).addTo(map_e8fbe348d84302849968f2d49426a651);
+        
+    
+            var icon_858826f54168f05534944216bbd516f6 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "stop",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_0918a8ef0ae3caeb57c63e5bb08fc928 = L.popup({
+  "maxWidth": 200,
+});
+
+        
+            
+                var html_055520e774f070016055e5ac6832f1f2 = $(`<div id="html_055520e774f070016055e5ac6832f1f2" style="width: 100.0%; height: 100.0%;"><b>TO</b><br>RSU Haji Surabaya</div>`)[0];
+                popup_0918a8ef0ae3caeb57c63e5bb08fc928.setContent(html_055520e774f070016055e5ac6832f1f2);
+            
+        
+
+        marker_432442197db763d777c3bdf227466b95.bindPopup(popup_0918a8ef0ae3caeb57c63e5bb08fc928)
+        ;
+
+        
+    
+    
+            marker_432442197db763d777c3bdf227466b95.bindTooltip(
+                `<div>
+                     END: RSU Haji Surabaya
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_432442197db763d777c3bdf227466b95.setIcon(icon_858826f54168f05534944216bbd516f6);
+            
+</script>
+</html>

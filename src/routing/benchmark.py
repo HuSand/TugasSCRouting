@@ -69,16 +69,20 @@ class BenchmarkRunner:
 
         for scenario in self.scenarios:
             log.info(f"\n  Scenario [{scenario.name}]: "
-                     f"{scenario.source_label} → {scenario.target_label}")
+                     f"{scenario.source_label} -> {scenario.target_label}")
+            from src.routing.visualize import ResultVisualiser
+            scenario_results = []
             for algo in algos:
                 result = algo.safe_run(G, scenario.source_node,
                                        scenario.target_node, scenario.name)
                 self.results.append(result)
+                scenario_results.append(result)
                 status = "OK   " if result.found else "FAIL "
                 log.info(f"    {status} [{algo.name:<22}]  "
                          f"time={result.total_time_s/60:5.1f}min  "
                          f"dist={result.total_distance_m/1000:5.2f}km  "
                          f"cpu={result.computation_ms:6.1f}ms")
+                ResultVisualiser.log_route_streets(G, result)
 
         return self._to_dataframe()
 
@@ -147,15 +151,15 @@ def build_scenarios(G: nx.MultiDiGraph,
 
     if len(hosp) >= 1 and len(school) >= 1:
         scenarios.append(make("hosp_to_school",
-                               "Hospital → school (monitoring patrol)",
+                               "Hospital -> school (monitoring patrol)",
                                hosp.iloc[0], school.iloc[0]))
     if len(hosp) >= 2:
         scenarios.append(make("hosp_to_hosp",
-                               "Hospital A → Hospital B (inter-facility)",
+                               "Hospital A -> Hospital B (inter-facility)",
                                hosp.iloc[0], hosp.iloc[1]))
     if len(police) >= 1 and len(hosp) >= 1:
         scenarios.append(make("police_to_hosp",
-                               "Police → hospital (emergency route)",
+                               "Police -> hospital (emergency route)",
                                police.iloc[0], hosp.iloc[0]))
     if len(p1) >= 4:
         scenarios.append(make("priority_cross_a",
@@ -175,7 +179,7 @@ def build_scenarios(G: nx.MultiDiGraph,
 def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime,
-        TeamAGA, TeamBGA,
+        SandyGA, BurhanGA, BimoGA, GeraldGA,
         EXAMPLE_SCENARIOS,
     )
     from src.routing.visualize import ResultVisualiser
@@ -209,12 +213,13 @@ def run_platform(cfg):
     # ── Register algorithms ──────────────────────────────────
     # Add or remove algorithms here.
     registry = AlgorithmRegistry()
-    registry.register(DijkstraTime())       # baseline: rute tercepat
-    registry.register(DijkstraDistance())   # baseline: rute terpendek
-    registry.register(AStarTime())          # baseline: A* tercepat
-    registry.register(TeamAGA())            # Team A — GA (tuning di algorithms.py)
-    registry.register(TeamBGA())            # Team B — GA (tuning di algorithms.py)
-    # registry.register(YourNewAlgorithm()) # tambah algoritma lain di sini
+    registry.register(DijkstraTime())      # baseline: rute tercepat
+    registry.register(DijkstraDistance()) # baseline: rute terpendek
+    registry.register(AStarTime())        # baseline: A* tercepat
+    registry.register(SandyGA())          # Sandy
+    registry.register(BurhanGA())         # Burhan
+    registry.register(BimoGA())           # Bimo
+    registry.register(GeraldGA())         # Gerald
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────
@@ -227,7 +232,7 @@ def run_platform(cfg):
         log.error("Could not build scenarios — check that extraction ran successfully.")
         return
     for s in scenarios:
-        log.info(f"  [{s.name}]  {s.source_label} → {s.target_label}")
+        log.info(f"  [{s.name}]  {s.source_label} -> {s.target_label}")
 
     # ── Run benchmark ────────────────────────────────────────
     runner = BenchmarkRunner(registry)

@@ -1,0 +1,88 @@
+2026-04-14 16:19:11,734 [INFO] Surabaya Public Facility Routing Platform
+2026-04-14 16:19:11,734 [INFO] Place : Surabaya, Indonesia
+2026-04-14 16:19:11,735 [INFO] Data  : C:\Users\sandx\OneDrive\Documents\Univ\Semester 6\TugasSCRouting\data
+2026-04-14 16:19:11,735 [INFO] Logs  : C:\Users\sandx\OneDrive\Documents\Univ\Semester 6\TugasSCRouting\logs
+2026-04-14 16:19:11,736 [INFO] 
+2026-04-14 16:19:11,736 [INFO] ============================================================
+2026-04-14 16:19:11,737 [INFO] STEP: COMPARE
+2026-04-14 16:19:11,738 [INFO] ============================================================
+2026-04-14 16:19:16,693 [INFO] Loading road network and facilities...
+2026-04-14 16:19:26,503 [INFO] Graph: 36681 nodes  |  Facilities: 4081
+2026-04-14 16:19:26,504 [INFO] Registered algorithms (7):
+2026-04-14 16:19:26,504 [INFO]   [dijkstra_time]  Dijkstra — minimise travel time (fastest route)
+2026-04-14 16:19:26,504 [INFO]   [dijkstra_distance]  Dijkstra — minimise distance in metres (shortest path)
+2026-04-14 16:19:26,505 [INFO]   [astar_time]  A* — minimise travel time with haversine heuristic
+2026-04-14 16:19:26,505 [INFO]   [sandy_ga]  Sandy — GA (pop=50, gen=60, tour=5)
+2026-04-14 16:19:26,505 [INFO]   [burhan_ga]  Burhan — GA (belum dituning)
+2026-04-14 16:19:26,506 [INFO]   [bimo_ga]  Bimo — GA (belum dituning)
+2026-04-14 16:19:26,506 [INFO]   [gerald_ga]  Gerald — GA (belum dituning)
+2026-04-14 16:19:26,506 [INFO] 
+Building benchmark scenarios...
+2026-04-14 16:19:26,529 [INFO] 
+Benchmark: 7 algorithms × 5 scenarios
+2026-04-14 16:19:26,589 [INFO]     OK    [dijkstra_time         ]  time= 10.0min  dist= 6.49km  cpu=  54.9ms
+2026-04-14 16:19:26,613 [INFO]     OK    [dijkstra_distance     ]  time= 11.3min  dist= 6.27km  cpu=  23.1ms
+2026-04-14 16:19:26,620 [INFO]     OK    [astar_time            ]  time= 10.4min  dist= 6.50km  cpu=   6.5ms
+2026-04-14 16:19:29,225 [INFO]     OK    [sandy_ga              ]  time= 10.0min  dist= 6.49km  cpu=2604.4ms
+2026-04-14 16:19:30,713 [INFO]     OK    [burhan_ga             ]  time= 10.0min  dist= 6.49km  cpu=1488.5ms
+2026-04-14 16:19:32,067 [INFO]     OK    [bimo_ga               ]  time= 10.0min  dist= 6.49km  cpu=1352.6ms
+2026-04-14 16:19:33,490 [INFO]     OK    [gerald_ga             ]  time= 10.0min  dist= 6.49km  cpu=1422.8ms
+2026-04-14 16:19:33,505 [INFO]     OK    [dijkstra_time         ]  time=  5.3min  dist= 4.69km  cpu=   9.5ms
+2026-04-14 16:19:33,519 [INFO]     OK    [dijkstra_distance     ]  time=  6.9min  dist= 4.32km  cpu=  13.9ms
+2026-04-14 16:19:33,521 [INFO]     OK    [astar_time            ]  time=  6.0min  dist= 4.60km  cpu=   1.6ms
+2026-04-14 16:19:34,373 [INFO]     OK    [sandy_ga              ]  time=  5.3min  dist= 4.69km  cpu= 850.4ms
+2026-04-14 16:19:34,859 [INFO]     OK    [burhan_ga             ]  time=  5.3min  dist= 4.69km  cpu= 485.4ms
+2026-04-14 16:19:35,373 [INFO]     OK    [bimo_ga               ]  time=  5.3min  dist= 4.69km  cpu= 513.0ms
+2026-04-14 16:19:35,929 [INFO]     OK    [gerald_ga             ]  time=  5.3min  dist= 4.69km  cpu= 555.3ms
+2026-04-14 16:19:36,014 [INFO]     OK    [dijkstra_time         ]  time= 14.0min  dist= 9.64km  cpu=  80.8ms
+2026-04-14 16:19:36,088 [INFO]     OK    [dijkstra_distance     ]  time= 15.3min  dist= 9.50km  cpu=  73.5ms
+2026-04-14 16:19:36,092 [INFO]     OK    [astar_time            ]  time= 14.0min  dist= 9.64km  cpu=   3.3ms
+2026-04-14 16:19:40,991 [INFO]     OK    [sandy_ga              ]  time= 14.0min  dist= 9.64km  cpu=4898.6ms
+2026-04-14 16:19:43,886 [INFO]     OK    [burhan_ga             ]  time= 14.0min  dist= 9.64km  cpu=2893.3ms
+2026-04-14 16:19:46,640 [INFO]     OK    [bimo_ga               ]  time= 14.0min  dist= 9.64km  cpu=2753.2ms
+2026-04-14 16:19:49,624 [INFO]     OK    [gerald_ga             ]  time= 14.0min  dist= 9.64km  cpu=2983.5ms
+2026-04-14 16:19:49,661 [INFO]     OK    [dijkstra_time         ]  time= 12.9min  dist= 8.30km  cpu=  30.8ms
+2026-04-14 16:19:49,693 [INFO]     OK    [dijkstra_distance     ]  time= 13.7min  dist= 8.04km  cpu=  31.8ms
+2026-04-14 16:19:49,712 [INFO]     OK    [astar_time            ]  time= 12.9min  dist= 8.30km  cpu=  18.1ms
+2026-04-14 16:19:52,486 [INFO]     OK    [sandy_ga              ]  time= 12.9min  dist= 8.30km  cpu=2772.3ms
+2026-04-14 16:19:54,512 [INFO]     OK    [burhan_ga             ]  time= 12.9min  dist= 8.30km  cpu=2025.4ms
+2026-04-14 16:19:56,625 [INFO]     OK    [bimo_ga               ]  time= 12.9min  dist= 8.30km  cpu=2112.8ms
+2026-04-14 16:19:58,346 [INFO]     OK    [gerald_ga             ]  time= 12.9min  dist= 8.30km  cpu=1719.6ms
+2026-04-14 16:19:58,543 [INFO]     OK    [dijkstra_time         ]  time= 27.2min  dist=18.34km  cpu= 194.1ms
+2026-04-14 16:19:58,729 [INFO]     OK    [dijkstra_distance     ]  time= 27.7min  dist=18.30km  cpu= 184.5ms
+2026-04-14 16:19:58,740 [INFO]     OK    [astar_time            ]  time= 27.2min  dist=18.34km  cpu=  10.5ms
+2026-04-14 16:20:16,484 [INFO]     OK    [sandy_ga              ]  time= 27.2min  dist=18.34km  cpu=17742.9ms
+2026-04-14 16:20:25,199 [INFO]     OK    [burhan_ga             ]  time= 27.2min  dist=18.34km  cpu=8712.8ms
+2026-04-14 16:20:34,443 [INFO]     OK    [bimo_ga               ]  time= 27.2min  dist=18.34km  cpu=9244.3ms
+2026-04-14 16:20:42,745 [INFO]     OK    [gerald_ga             ]  time= 27.2min  dist=18.34km  cpu=8300.8ms
+2026-04-14 16:20:42,761 [INFO] 
+BENCHMARK SUMMARY
+============================================================
+                   solved  avg_time_min  avg_dist_km  avg_cpu_ms  best_time_min  worst_time_min
+algorithm                                                                                      
+astar_time              5        14.109        9.477       8.002          6.011          27.155
+bimo_ga                 5        13.892        9.494    3195.192          5.291          27.155
+burhan_ga               5        13.892        9.494    3121.056          5.291          27.155
+dijkstra_distance       5        15.003        9.285      65.379          6.909          27.730
+dijkstra_time           5        13.892        9.494      74.046          5.291          27.155
+gerald_ga               5        13.892        9.494    2996.387          5.291          27.155
+sandy_ga                5        13.892        9.494    5773.722          5.291          27.155
+2026-04-14 16:20:42,771 [INFO] Saved -> comparison_results.csv
+2026-04-14 16:20:42,777 [INFO] Saved -> comparison_summary.csv
+2026-04-14 16:20:42,788 [INFO] 
+Generating visualisations...
+2026-04-14 16:20:42,856 [INFO]   Map -> comparison_map_darmo_to_rsu_haji.html
+2026-04-14 16:20:42,873 [INFO]   Map -> comparison_map_polsek_genteng_to_rs_darmo.html
+2026-04-14 16:20:42,891 [INFO]   Map -> comparison_map_national_to_rs_ramelan.html
+2026-04-14 16:20:42,901 [INFO]   Map -> comparison_map_polsek_rungkut_to_rs_onkologi.html
+2026-04-14 16:20:42,910 [INFO]   Map -> comparison_map_ciputra_to_rsu_haji.html
+2026-04-14 16:20:43,510 [INFO]   Chart -> comparison_chart.png
+2026-04-14 16:20:43,511 [INFO] 
+Outputs in data/:
+2026-04-14 16:20:43,511 [INFO]   comparison_results.csv    raw results per algorithm/scenario
+2026-04-14 16:20:43,511 [INFO]   comparison_summary.csv    aggregate stats per algorithm
+2026-04-14 16:20:43,511 [INFO]   comparison_chart.png      travel time + speed bar charts
+2026-04-14 16:20:43,512 [INFO]   comparison_map_*.html     route overlay maps (open in browser)
+2026-04-14 16:20:43,513 [INFO] [compare] finished in 91.8s
+2026-04-14 16:20:43,513 [INFO] 
+2026-04-14 16:20:43,514 [INFO] All done in 91.8s

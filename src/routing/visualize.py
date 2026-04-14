@@ -9,7 +9,6 @@ from typing import List
 import numpy as np
 import pandas as pd
 import folium
-import osmnx as ox
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -22,6 +21,28 @@ ROUTE_COLORS = [
     "#E63946", "#2196F3", "#4CAF50", "#FF9800",
     "#9C27B0", "#00BCD4", "#FF5722", "#607D8B",
 ]
+
+
+def _route_street_names(G, route: list) -> list:
+    """
+    Kembalikan daftar nama jalan yang dilalui (deduplicated berurutan).
+    Dipakai untuk turn-by-turn log dan map popup.
+    """
+    streets = []
+    prev = None
+    for u, v in zip(route[:-1], route[1:]):
+        data = G.get_edge_data(u, v)
+        if not data:
+            continue
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        name = best.get("name") or best.get("highway") or "unnamed"
+        if isinstance(name, list):
+            name = name[0]
+        name = str(name).strip()
+        if name and name != prev:
+            streets.append(name)
+            prev = name
+    return streets
 
 
 class ResultVisualiser:
@@ -43,50 +64,98 @@ class ResultVisualiser:
             tiles="cartodbpositron",
         )
 
+        drawn = []
         for i, r in enumerate(results):
             if not r.found or len(r.route) < 2:
                 continue
             color = ROUTE_COLORS[i % len(ROUTE_COLORS)]
-            tip   = (f"{r.algorithm_name} | "
-                     f"{r.total_time_s/60:.1f} min | "
-                     f"{r.total_distance_m/1000:.2f} km")
-            try:
-                ox.plot_route_folium(
-                    G, r.route, route_map=m,
-                    color=color, weight=4 + i, opacity=0.78,
-                    tooltip=tip,
-                )
-            except Exception:
-                pass
 
+            # Ambil koordinat (lat, lon) tiap node dalam route
+            coords = []
+            for n in r.route:
+                node = G.nodes.get(n)
+                if node:
+                    coords.append((float(node["y"]), float(node["x"])))
+
+            if len(coords) < 2:
+                continue
+
+            streets    = _route_street_names(G, r.route)
+            street_str = " -> ".join(streets) if streets else "-"
+            popup_html = (
+                f"<b>{r.algorithm_name}</b><br>"
+                f"Waktu : {r.total_time_s/60:.1f} menit<br>"
+                f"Jarak : {r.total_distance_m/1000:.2f} km<br>"
+                f"<hr style='margin:4px 0'>"
+                f"<small><b>Rute:</b><br>{street_str}</small>"
+            )
+            tooltip = (f"{r.algorithm_name} | "
+                       f"{r.total_time_s/60:.1f}min | "
+                       f"{r.total_distance_m/1000:.2f}km")
+
+            folium.PolyLine(
+                coords,
+                color=color,
+                weight=5,
+                opacity=0.80,
+                tooltip=tooltip,
+                popup=folium.Popup(popup_html, max_width=320),
+            ).add_to(m)
+            drawn.append((i, r, color))
+
+        # Marker awal & tujuan
         folium.Marker(
             list(scenario.source_coords),
-            popup=f"FROM: {scenario.source_label}",
+            popup=folium.Popup(f"<b>FROM</b><br>{scenario.source_label}", max_width=200),
+            tooltip=f"START: {scenario.source_label}",
             icon=folium.Icon(color="green", icon="play", prefix="glyphicon"),
         ).add_to(m)
         folium.Marker(
             list(scenario.target_coords),
-            popup=f"TO: {scenario.target_label}",
+            popup=folium.Popup(f"<b>TO</b><br>{scenario.target_label}", max_width=200),
+            tooltip=f"END: {scenario.target_label}",
             icon=folium.Icon(color="red", icon="stop", prefix="glyphicon"),
         ).add_to(m)
 
         # Legend
-        legend = ("<div style='position:fixed;bottom:30px;left:30px;z-index:9999;"
-                  "background:white;padding:10px 14px;border-radius:6px;"
-                  "border:1px solid #ccc;font-size:12px;line-height:1.8;'>"
-                  f"<b>{scenario.name}</b><br>")
-        for i, r in enumerate(results):
-            if not r.found:
-                continue
-            c = ROUTE_COLORS[i % len(ROUTE_COLORS)]
-            legend += (f"<span style='color:{c};font-size:18px;'>&#9644;</span> "
-                       f"{r.algorithm_name}<br>")
-        legend += "</div>"
+        legend = (
+            "<div style='position:fixed;bottom:30px;left:30px;z-index:9999;"
+            "background:white;padding:10px 14px;border-radius:6px;"
+            "border:1px solid #ccc;font-size:12px;line-height:1.9;max-width:260px;'>"
+            f"<b>{scenario.source_label}</b><br>"
+            f"-> <b>{scenario.target_label}</b><br>"
+            "<hr style='margin:4px 0'>"
+        )
+        for i, r, c in drawn:
+            legend += (
+                f"<span style='color:{c};font-size:18px;'>&#9644;</span> "
+                f"<b>{r.algorithm_name}</b> &nbsp;"
+                f"{r.total_time_s/60:.1f}min &nbsp;"
+                f"{r.total_distance_m/1000:.2f}km<br>"
+            )
+        legend += "<hr style='margin:4px 0'><small>Klik rute untuk detail nama jalan</small></div>"
         m.get_root().html.add_child(folium.Element(legend))
 
         path = self.out / f"comparison_map_{scenario.name}.html"
         m.save(str(path))
-        log.info(f"  Map -> comparison_map_{scenario.name}.html")
+        log.info(f"  Map -> comparison_map_{scenario.name}.html  ({len(drawn)} routes drawn)")
+
+    # ──────────────────────────────────────────────────────
+    # Turn-by-turn log (dipanggil dari benchmark)
+    # ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def log_route_streets(G, result: RouteResult):
+        """
+        Log nama jalan yang dilalui untuk satu result.
+        Contoh output:
+          [sandy_ga] Jl. Darmo -> Jl. Raya Wonokromo -> Jl. Ahmad Yani -> ...
+        """
+        if not result.found or len(result.route) < 2:
+            return
+        streets = _route_street_names(G, result.route)
+        if streets:
+            log.info(f"    route [{result.algorithm_name}]: {' -> '.join(streets)}")
 
     # ──────────────────────────────────────────────────────
     # Comparison charts
@@ -137,7 +206,7 @@ class ResultVisualiser:
             w = bar.get_width()
             ax2.text(w + 0.2, bar.get_y() + bar.get_height() / 2,
                      f"{w:.1f}ms", ha="left", va="center", fontsize=9)
-        ax2.set_xlabel("Avg Computation Time (ms)  — lower is faster")
+        ax2.set_xlabel("Avg Computation Time (ms)  - lower is faster")
         ax2.set_title("Algorithm Speed")
         ax2.spines["top"].set_visible(False)
         ax2.spines["right"].set_visible(False)

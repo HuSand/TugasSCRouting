@@ -35,7 +35,7 @@ def _demo_path_comparison(G, fac, cfg):
 
     src, dst = hospitals.iloc[0], schools.iloc[0]
     sn, dn   = int(src["nearest_node"]), int(dst["nearest_node"])
-    log.info(f"  From: {src.get('name','Hospital')} → {dst.get('name','School')}")
+    log.info(f"  From: {src.get('name','Hospital')} -> {dst.get('name','School')}")
 
     try:
         fast  = nx.shortest_path(G, sn, dn, weight="travel_time")

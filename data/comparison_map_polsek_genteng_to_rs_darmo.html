@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_cf0c8351126e510d0ded61b832f0a2fd {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    <div style='position:fixed;bottom:30px;left:30px;z-index:9999;background:white;padding:10px 14px;border-radius:6px;border:1px solid #ccc;font-size:12px;line-height:1.9;max-width:260px;'><b>Polsek Genteng</b><br>-> <b>RS Darmo</b><br><hr style='margin:4px 0'><span style='color:#E63946;font-size:18px;'>&#9644;</span> <b>dijkstra_time</b> &nbsp;5.3min &nbsp;4.69km<br><span style='color:#2196F3;font-size:18px;'>&#9644;</span> <b>dijkstra_distance</b> &nbsp;6.9min &nbsp;4.32km<br><span style='color:#4CAF50;font-size:18px;'>&#9644;</span> <b>astar_time</b> &nbsp;6.0min &nbsp;4.60km<br><span style='color:#FF9800;font-size:18px;'>&#9644;</span> <b>sandy_ga</b> &nbsp;5.3min &nbsp;4.69km<br><span style='color:#9C27B0;font-size:18px;'>&#9644;</span> <b>burhan_ga</b> &nbsp;5.3min &nbsp;4.69km<br><span style='color:#00BCD4;font-size:18px;'>&#9644;</span> <b>bimo_ga</b> &nbsp;5.3min &nbsp;4.69km<br><span style='color:#FF5722;font-size:18px;'>&#9644;</span> <b>gerald_ga</b> &nbsp;5.3min &nbsp;4.69km<br><hr style='margin:4px 0'><small>Klik rute untuk detail nama jalan</small></div>
+    
+            <div class="folium-map" id="map_cf0c8351126e510d0ded61b832f0a2fd" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_cf0c8351126e510d0ded61b832f0a2fd = L.map(
+                "map_cf0c8351126e510d0ded61b832f0a2fd",
+                {
+                    center: [-7.2556, 112.7483],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 14,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_e0b0747fd80777e14cd6463d031911d3 = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_e0b0747fd80777e14cd6463d031911d3.addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+            var poly_line_8d54812aab8cb31caf780f7320f086f4 = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2559803, 112.7504052], [-7.2560688, 112.7505396], [-7.2574776, 112.7508244], [-7.2580273, 112.750933], [-7.2585109, 112.7510205], [-7.2591506, 112.7511153], [-7.259861, 112.7512358], [-7.2620535, 112.7516919], [-7.262871, 112.75198], [-7.2629669, 112.7519771], [-7.2659309, 112.7517984], [-7.2666055, 112.7514369], [-7.26809, 112.7510147], [-7.2699315, 112.75092], [-7.2707087, 112.7504643], [-7.2714091, 112.7503896], [-7.272538, 112.7501446], [-7.2736991, 112.749864], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2770399, 112.7489782], [-7.2765886, 112.7469218], [-7.2765095, 112.7465577], [-7.2767941, 112.745369], [-7.2768439, 112.7452643], [-7.2769361, 112.745032], [-7.2769565, 112.7449789], [-7.2772222, 112.7442766], [-7.2774049, 112.7438292], [-7.2775612, 112.7431872], [-7.2777064, 112.7431843], [-7.2778094, 112.7432139], [-7.2776596, 112.7424938], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#E63946", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#E63946", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_ba16cbed9ac37e18c2a8720960b34b0b = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_e77f5b058a9a33ddbd3af2da706ac82e = $(`<div id="html_e77f5b058a9a33ddbd3af2da706ac82e" style="width: 100.0%; height: 100.0%;"><b>dijkstra_time</b><br>Waktu : 5.3 menit<br>Jarak : 4.69 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Kusuma Bangsa -> Jalan Anggrek -> Jalan Stasiun Gubeng -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_ba16cbed9ac37e18c2a8720960b34b0b.setContent(html_e77f5b058a9a33ddbd3af2da706ac82e);
+            
+        
+
+        poly_line_8d54812aab8cb31caf780f7320f086f4.bindPopup(popup_ba16cbed9ac37e18c2a8720960b34b0b)
+        ;
+
+        
+    
+    
+            poly_line_8d54812aab8cb31caf780f7320f086f4.bindTooltip(
+                `<div>
+                     dijkstra_time | 5.3min | 4.69km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ae3aabba6d34044c9436fff51085b931 = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2560097, 112.7487824], [-7.2570674, 112.7490004], [-7.2582417, 112.7492443], [-7.2583685, 112.749148], [-7.2612205, 112.7484733], [-7.2616849, 112.7491188], [-7.2627587, 112.7501389], [-7.2630306, 112.7502843], [-7.2631299, 112.7503493], [-7.2658326, 112.7510482], [-7.2663024, 112.7509657], [-7.2660187, 112.7499195], [-7.2662089, 112.7497479], [-7.2671022, 112.7494656], [-7.2676384, 112.7491504], [-7.2681472, 112.7486086], [-7.2690279, 112.7476846], [-7.2697182, 112.7469706], [-7.2699235, 112.746777], [-7.2719286, 112.7448587], [-7.2721278, 112.7447048], [-7.2724929, 112.744414], [-7.2725434, 112.7443739], [-7.2725076, 112.7442942], [-7.2720021, 112.7428684], [-7.2728057, 112.7425335], [-7.2731962, 112.7423886], [-7.273336, 112.742339], [-7.274995, 112.7418148], [-7.277339, 112.7413693], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#2196F3", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#2196F3", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_990a7dfffeb2cb7a697a8493293a107b = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_d2040ebba2e853ce41e1ccf2e4d3fbac = $(`<div id="html_d2040ebba2e853ce41e1ccf2e4d3fbac" style="width: 100.0%; height: 100.0%;"><b>dijkstra_distance</b><br>Waktu : 6.9 menit<br>Jarak : 4.32 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Wijaya Kusuma -> Jalan Walikota Mustajab -> Jalan Gubeng Pojok -> Jalan Pemuda -> Jalan Kayoon -> Jalan Sono Kembang -> Jalan Panglima Besar Sudirman -> Jalan Jenderal Urip Sumoharjo -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_990a7dfffeb2cb7a697a8493293a107b.setContent(html_d2040ebba2e853ce41e1ccf2e4d3fbac);
+            
+        
+
+        poly_line_ae3aabba6d34044c9436fff51085b931.bindPopup(popup_990a7dfffeb2cb7a697a8493293a107b)
+        ;
+
+        
+    
+    
+            poly_line_ae3aabba6d34044c9436fff51085b931.bindTooltip(
+                `<div>
+                     dijkstra_distance | 6.9min | 4.32km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f8e8e73c7eb98e95c3ed135e5953badb = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2560097, 112.7487824], [-7.2570674, 112.7490004], [-7.2582417, 112.7492443], [-7.2583685, 112.749148], [-7.2612205, 112.7484733], [-7.2616849, 112.7491188], [-7.2627587, 112.7501389], [-7.2630306, 112.7502843], [-7.2631299, 112.7503493], [-7.2641495, 112.7509082], [-7.2655143, 112.7510839], [-7.2659881, 112.7512539], [-7.2663198, 112.7513681], [-7.2664559, 112.751399], [-7.2666055, 112.7514369], [-7.26809, 112.7510147], [-7.2699315, 112.75092], [-7.2707087, 112.7504643], [-7.2714091, 112.7503896], [-7.272538, 112.7501446], [-7.2736991, 112.749864], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2770399, 112.7489782], [-7.2765886, 112.7469218], [-7.2765095, 112.7465577], [-7.2767941, 112.745369], [-7.2768439, 112.7452643], [-7.2769361, 112.745032], [-7.2769565, 112.7449789], [-7.2772222, 112.7442766], [-7.2774049, 112.7438292], [-7.2775612, 112.7431872], [-7.2777064, 112.7431843], [-7.2778094, 112.7432139], [-7.2776596, 112.7424938], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#4CAF50", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#4CAF50", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_b25df96f45d3536678109dcf66bb3883 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_aa9fbb73f6110e041f958131692fcefb = $(`<div id="html_aa9fbb73f6110e041f958131692fcefb" style="width: 100.0%; height: 100.0%;"><b>astar_time</b><br>Waktu : 6.0 menit<br>Jarak : 4.60 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Wijaya Kusuma -> Jalan Walikota Mustajab -> Jalan Gubeng Pojok -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_b25df96f45d3536678109dcf66bb3883.setContent(html_aa9fbb73f6110e041f958131692fcefb);
+            
+        
+
+        poly_line_f8e8e73c7eb98e95c3ed135e5953badb.bindPopup(popup_b25df96f45d3536678109dcf66bb3883)
+        ;
+
+        
+    
+    
+            poly_line_f8e8e73c7eb98e95c3ed135e5953badb.bindTooltip(
+                `<div>
+                     astar_time | 6.0min | 4.60km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_da812a329a6b6ece78e631cd01bf4588 = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2559803, 112.7504052], [-7.2560688, 112.7505396], [-7.2574776, 112.7508244], [-7.2580273, 112.750933], [-7.2585109, 112.7510205], [-7.2591506, 112.7511153], [-7.259861, 112.7512358], [-7.2620535, 112.7516919], [-7.262871, 112.75198], [-7.2629669, 112.7519771], [-7.2659309, 112.7517984], [-7.2666055, 112.7514369], [-7.26809, 112.7510147], [-7.2699315, 112.75092], [-7.2707087, 112.7504643], [-7.2714091, 112.7503896], [-7.272538, 112.7501446], [-7.2736991, 112.749864], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2770399, 112.7489782], [-7.2765886, 112.7469218], [-7.2765095, 112.7465577], [-7.2767941, 112.745369], [-7.2768439, 112.7452643], [-7.2769361, 112.745032], [-7.2769565, 112.7449789], [-7.2772222, 112.7442766], [-7.2774049, 112.7438292], [-7.2775612, 112.7431872], [-7.2777064, 112.7431843], [-7.2778094, 112.7432139], [-7.2776596, 112.7424938], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#FF9800", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#FF9800", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_cfe4240e0df784fd11c80cb4bcf06d24 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_f38150553c9ac6a05cb18d91b46285ac = $(`<div id="html_f38150553c9ac6a05cb18d91b46285ac" style="width: 100.0%; height: 100.0%;"><b>sandy_ga</b><br>Waktu : 5.3 menit<br>Jarak : 4.69 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Kusuma Bangsa -> Jalan Anggrek -> Jalan Stasiun Gubeng -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_cfe4240e0df784fd11c80cb4bcf06d24.setContent(html_f38150553c9ac6a05cb18d91b46285ac);
+            
+        
+
+        poly_line_da812a329a6b6ece78e631cd01bf4588.bindPopup(popup_cfe4240e0df784fd11c80cb4bcf06d24)
+        ;
+
+        
+    
+    
+            poly_line_da812a329a6b6ece78e631cd01bf4588.bindTooltip(
+                `<div>
+                     sandy_ga | 5.3min | 4.69km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_d9d12c55ce83f14e8b6bce6c5a587a93 = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2559803, 112.7504052], [-7.2560688, 112.7505396], [-7.2574776, 112.7508244], [-7.2580273, 112.750933], [-7.2585109, 112.7510205], [-7.2591506, 112.7511153], [-7.259861, 112.7512358], [-7.2620535, 112.7516919], [-7.262871, 112.75198], [-7.2629669, 112.7519771], [-7.2659309, 112.7517984], [-7.2666055, 112.7514369], [-7.26809, 112.7510147], [-7.2699315, 112.75092], [-7.2707087, 112.7504643], [-7.2714091, 112.7503896], [-7.272538, 112.7501446], [-7.2736991, 112.749864], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2770399, 112.7489782], [-7.2765886, 112.7469218], [-7.2765095, 112.7465577], [-7.2767941, 112.745369], [-7.2768439, 112.7452643], [-7.2769361, 112.745032], [-7.2769565, 112.7449789], [-7.2772222, 112.7442766], [-7.2774049, 112.7438292], [-7.2775612, 112.7431872], [-7.2777064, 112.7431843], [-7.2778094, 112.7432139], [-7.2776596, 112.7424938], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#9C27B0", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#9C27B0", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_b3675df0389eaf59f58aa3b0fcbc8f97 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6c239d74b5ac657754312b6f53fcd887 = $(`<div id="html_6c239d74b5ac657754312b6f53fcd887" style="width: 100.0%; height: 100.0%;"><b>burhan_ga</b><br>Waktu : 5.3 menit<br>Jarak : 4.69 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Kusuma Bangsa -> Jalan Anggrek -> Jalan Stasiun Gubeng -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_b3675df0389eaf59f58aa3b0fcbc8f97.setContent(html_6c239d74b5ac657754312b6f53fcd887);
+            
+        
+
+        poly_line_d9d12c55ce83f14e8b6bce6c5a587a93.bindPopup(popup_b3675df0389eaf59f58aa3b0fcbc8f97)
+        ;
+
+        
+    
+    
+            poly_line_d9d12c55ce83f14e8b6bce6c5a587a93.bindTooltip(
+                `<div>
+                     burhan_ga | 5.3min | 4.69km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ed81262c88ddd7e4e9baff13000ec8bc = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2559803, 112.7504052], [-7.2560688, 112.7505396], [-7.2574776, 112.7508244], [-7.2580273, 112.750933], [-7.2585109, 112.7510205], [-7.2591506, 112.7511153], [-7.259861, 112.7512358], [-7.2620535, 112.7516919], [-7.262871, 112.75198], [-7.2629669, 112.7519771], [-7.2659309, 112.7517984], [-7.2666055, 112.7514369], [-7.26809, 112.7510147], [-7.2699315, 112.75092], [-7.2707087, 112.7504643], [-7.2714091, 112.7503896], [-7.272538, 112.7501446], [-7.2736991, 112.749864], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2770399, 112.7489782], [-7.2765886, 112.7469218], [-7.2765095, 112.7465577], [-7.2767941, 112.745369], [-7.2768439, 112.7452643], [-7.2769361, 112.745032], [-7.2769565, 112.7449789], [-7.2772222, 112.7442766], [-7.2774049, 112.7438292], [-7.2775612, 112.7431872], [-7.2777064, 112.7431843], [-7.2778094, 112.7432139], [-7.2776596, 112.7424938], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#00BCD4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#00BCD4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_34413a0f91006284eb327fd046678d94 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_6067bdd0b5a0cea0ef416e8789144af3 = $(`<div id="html_6067bdd0b5a0cea0ef416e8789144af3" style="width: 100.0%; height: 100.0%;"><b>bimo_ga</b><br>Waktu : 5.3 menit<br>Jarak : 4.69 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Kusuma Bangsa -> Jalan Anggrek -> Jalan Stasiun Gubeng -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_34413a0f91006284eb327fd046678d94.setContent(html_6067bdd0b5a0cea0ef416e8789144af3);
+            
+        
+
+        poly_line_ed81262c88ddd7e4e9baff13000ec8bc.bindPopup(popup_34413a0f91006284eb327fd046678d94)
+        ;
+
+        
+    
+    
+            poly_line_ed81262c88ddd7e4e9baff13000ec8bc.bindTooltip(
+                `<div>
+                     bimo_ga | 5.3min | 4.69km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8efbd711e29060cc498291d503327fab = L.polyline(
+                [[-7.2559374, 112.7486971], [-7.2559392, 112.7487693], [-7.2559803, 112.7504052], [-7.2560688, 112.7505396], [-7.2574776, 112.7508244], [-7.2580273, 112.750933], [-7.2585109, 112.7510205], [-7.2591506, 112.7511153], [-7.259861, 112.7512358], [-7.2620535, 112.7516919], [-7.262871, 112.75198], [-7.2629669, 112.7519771], [-7.2659309, 112.7517984], [-7.2666055, 112.7514369], [-7.26809, 112.7510147], [-7.2699315, 112.75092], [-7.2707087, 112.7504643], [-7.2714091, 112.7503896], [-7.272538, 112.7501446], [-7.2736991, 112.749864], [-7.2749584, 112.7495937], [-7.276, 112.7493771], [-7.2768303, 112.7491942], [-7.2770399, 112.7489782], [-7.2765886, 112.7469218], [-7.2765095, 112.7465577], [-7.2767941, 112.745369], [-7.2768439, 112.7452643], [-7.2769361, 112.745032], [-7.2769565, 112.7449789], [-7.2772222, 112.7442766], [-7.2774049, 112.7438292], [-7.2775612, 112.7431872], [-7.2777064, 112.7431843], [-7.2778094, 112.7432139], [-7.2776596, 112.7424938], [-7.2774108, 112.7413552], [-7.2796651, 112.7409491], [-7.2803892, 112.740801], [-7.2811851, 112.7406594], [-7.2813605, 112.7406301], [-7.2814414, 112.7404428], [-7.2823142, 112.7384721], [-7.2833237, 112.7389658], [-7.2850425, 112.7386045], [-7.2860876, 112.7384791]],
+                {"bubblingMouseEvents": true, "color": "#FF5722", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#FF5722", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 5}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+        var popup_444aef05df73c56a327834b91737bb34 = L.popup({
+  "maxWidth": 320,
+});
+
+        
+            
+                var html_cba141eca5b2ade6fc935d3357eedf8c = $(`<div id="html_cba141eca5b2ade6fc935d3357eedf8c" style="width: 100.0%; height: 100.0%;"><b>gerald_ga</b><br>Waktu : 5.3 menit<br>Jarak : 4.69 km<br><hr style='margin:4px 0'><small><b>Rute:</b><br>Jalan Ambengan -> Jalan Kusuma Bangsa -> Jalan Anggrek -> Jalan Stasiun Gubeng -> Jalan Sumatera -> Jalan Biliton -> Jalan Raya Sulawesi -> Jalan Pasar Keputran -> secondary -> Jalan Pandegiling -> Jalan Raya Darmo -> Jalan M. Jasin -> Jalan Dokter Soetomo -> Jalan Dokter Wahidin -> Jalan Ronggolawe</small></div>`)[0];
+                popup_444aef05df73c56a327834b91737bb34.setContent(html_cba141eca5b2ade6fc935d3357eedf8c);
+            
+        
+
+        poly_line_8efbd711e29060cc498291d503327fab.bindPopup(popup_444aef05df73c56a327834b91737bb34)
+        ;
+
+        
+    
+    
+            poly_line_8efbd711e29060cc498291d503327fab.bindTooltip(
+                `<div>
+                     gerald_ga | 5.3min | 4.69km
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_a736f525850898c06d21db0657e92880 = L.marker(
+                [-7.2556, 112.7483],
+                {
+}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+            var icon_f4cf4b47b49bcfbe7dc2407e1737fef9 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "green",
+  "iconColor": "white",
+  "icon": "play",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_3a7f36fbf7082011bd0eedc59e8289b3 = L.popup({
+  "maxWidth": 200,
+});
+
+        
+            
+                var html_1ba950e471a32d5a8249e26750fa6279 = $(`<div id="html_1ba950e471a32d5a8249e26750fa6279" style="width: 100.0%; height: 100.0%;"><b>FROM</b><br>Polsek Genteng</div>`)[0];
+                popup_3a7f36fbf7082011bd0eedc59e8289b3.setContent(html_1ba950e471a32d5a8249e26750fa6279);
+            
+        
+
+        marker_a736f525850898c06d21db0657e92880.bindPopup(popup_3a7f36fbf7082011bd0eedc59e8289b3)
+        ;
+
+        
+    
+    
+            marker_a736f525850898c06d21db0657e92880.bindTooltip(
+                `<div>
+                     START: Polsek Genteng
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_a736f525850898c06d21db0657e92880.setIcon(icon_f4cf4b47b49bcfbe7dc2407e1737fef9);
+            
+    
+            var marker_14b0f1a0cf23dab66aced937dc22f462 = L.marker(
+                [-7.2874, 112.7382],
+                {
+}
+            ).addTo(map_cf0c8351126e510d0ded61b832f0a2fd);
+        
+    
+            var icon_80d0a086c5deb29b533ad6012a84aedf = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "stop",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_df983363f1bcee23d4bcc5b3ce9a5be9 = L.popup({
+  "maxWidth": 200,
+});
+
+        
+            
+                var html_f5c1bc5cd6dec46a44020828c8d7afa4 = $(`<div id="html_f5c1bc5cd6dec46a44020828c8d7afa4" style="width: 100.0%; height: 100.0%;"><b>TO</b><br>RS Darmo</div>`)[0];
+                popup_df983363f1bcee23d4bcc5b3ce9a5be9.setContent(html_f5c1bc5cd6dec46a44020828c8d7afa4);
+            
+        
+
+        marker_14b0f1a0cf23dab66aced937dc22f462.bindPopup(popup_df983363f1bcee23d4bcc5b3ce9a5be9)
+        ;
+
+        
+    
+    
+            marker_14b0f1a0cf23dab66aced937dc22f462.bindTooltip(
+                `<div>
+                     END: RS Darmo
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+                marker_14b0f1a0cf23dab66aced937dc22f462.setIcon(icon_80d0a086c5deb29b533ad6012a84aedf);
+            
+</script>
+</html>

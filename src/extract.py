@@ -100,7 +100,7 @@ def _clean_facilities(gdf: gpd.GeoDataFrame, cfg) -> gpd.GeoDataFrame:
 
     before = len(df)
     df = df.drop_duplicates(subset=["name", "facility_type"], keep="first")
-    log.info(f"Deduplicated: {before} → {len(df)} (-{before - len(df)})")
+    log.info(f"Deduplicated: {before} -> {len(df)} (-{before - len(df)})")
 
     for cat, count in df["category"].value_counts().items():
         log.info(f"  {cat}: {count}")

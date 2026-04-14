@@ -53,6 +53,7 @@ from src.routing.base import BaseRoutingAlgorithm, RouteResult, Scenario
 # ──────────────────────────────────────────────────────────────
 # Built-in Baselines
 # (do not remove — used as reference lines in comparisons)
+# used as comparison algorithm to AStar(GA Algorithm)
 # ──────────────────────────────────────────────────────────────
 
 class DijkstraTime(BaseRoutingAlgorithm):
@@ -86,7 +87,11 @@ class DijkstraDistance(BaseRoutingAlgorithm):
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
 
-
+# ──────────────────────────────────────────────────────────────
+# Built-in Baselines
+# (do not remove — used as main lines in comparisons)
+# used as cmain omparison algorithm for this project(GA Algorithm)
+# ──────────────────────────────────────────────────────────────
 class AStarTime(BaseRoutingAlgorithm):
     """
     A* with straight-line (haversine) heuristic, minimising travel time.
@@ -127,7 +132,8 @@ class AStarTime(BaseRoutingAlgorithm):
 
 # ──────────────────────────────────────────────────────────────
 # GA SHARED HELPERS
-# Dipakai oleh TeamAGA dan TeamBGA — jangan diubah.
+# Dipakai oleh semua GA (Sandy, Burhan, Bimo, Gerald).
+# Jangan diubah — kalau mau custom, override di class masing-masing.
 # ──────────────────────────────────────────────────────────────
 
 def _ga_path_cost(G, path: list) -> float:
@@ -201,185 +207,235 @@ def _ga_tournament(population: list, fitness: list,
 
 
 # ──────────────────────────────────────────────────────────────
-# TEAM GA SLOTS
-# Masing-masing tim tuning parameter di bagian "TUNING ZONE".
-# Jangan ubah _ga_* helper di atas — ubah di sini saja.
+# INDIVIDUAL GA SLOTS
+# Sandy  : DONE  -- populasi dan cross-over rate tinggi
+# Burhan : TODO  -- isi TUNING ZONE kamu
+# Bimo   : TODO  -- isi TUNING ZONE kamu
+# Gerald : TODO  -- isi TUNING ZONE kamu
+#
+# Yang perlu diubah per orang: HANYA blok TUNING ZONE.
+# Kalau mau lebih advanced, boleh override _crossover/_mutate.
+# Jangan ubah find_route kecuali kamu tau yang kamu lakukan.
 # ──────────────────────────────────────────────────────────────
 
-class TeamAGA(BaseRoutingAlgorithm):
+def _ga_run(algo, G, source_node, target_node, scenario_name):
     """
-    ── TEAM A — Genetic Algorithm ───────────────────────────────
-    Cara kerja:
-      1. Buat POPULATION_SIZE path awal (Dijkstra + noise).
-      2. Setiap generasi: seleksi → crossover → mutasi.
-      3. Elitisme: individu terbaik selalu lolos ke generasi berikut.
-      4. Output: path dengan travel_time terkecil setelah GENERATIONS gen.
-
-    Yang bisa Tim A ubah:
-      - Parameter di TUNING ZONE (baris 40-an ke bawah)
-      - Override _crossover / _mutate kalau mau strategi berbeda
-    ─────────────────────────────────────────────────────────────
+    Shared GA loop — dipakai semua slot supaya tidak duplikat kode.
+    Dipanggil dari find_route masing-masing class.
     """
-    name        = "team_a_ga"
-    description = "Team A — Genetic Algorithm"
+    t0  = time.perf_counter()
+    rng = random.Random(algo.RANDOM_SEED)
 
-    # ── TUNING ZONE Team A ────────────────────────────────────
-    POPULATION_SIZE = 30     # jumlah individu per generasi
-    GENERATIONS     = 50     # berapa kali evolusi
-    CROSSOVER_RATE  = 0.8    # probabilitas crossover (0.0–1.0)
-    MUTATION_RATE   = 0.3    # probabilitas mutasi   (0.0–1.0)
-    TOURNAMENT_SIZE = 3      # peserta tournament selection
-    RANDOM_SEED     = 42     # set None → non-deterministik
+    # 1. Populasi awal
+    population = []
+    for _ in range(algo.POPULATION_SIZE):
+        p = _ga_random_path(G, source_node, target_node, rng)
+        if p:
+            population.append(p)
+
+    # Fallback jika graph terlalu sparse
+    if not population:
+        try:
+            route = nx.shortest_path(G, source_node, target_node,
+                                     weight="travel_time")
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(algo.name, scenario_name,
+                                       source_node, target_node, str(e), ms)
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(G, algo.name, scenario_name,
+                                 source_node, target_node, route, ms)
+
+    # 2. Evolusi
+    for _ in range(algo.GENERATIONS):
+        fitness  = [_ga_path_cost(G, p) for p in population]
+        best_idx = min(range(len(population)), key=lambda i: fitness[i])
+        elite    = population[best_idx]
+
+        new_pop = [elite]
+        while len(new_pop) < algo.POPULATION_SIZE:
+            p1 = _ga_tournament(population, fitness, algo.TOURNAMENT_SIZE, rng)
+            if rng.random() < algo.CROSSOVER_RATE:
+                p2    = _ga_tournament(population, fitness, algo.TOURNAMENT_SIZE, rng)
+                child = algo._crossover(p1, p2, rng)
+            else:
+                child = p1[:]
+            if rng.random() < algo.MUTATION_RATE:
+                child = algo._mutate(G, child, rng)
+            new_pop.append(child)
+        population = new_pop
+
+    # 3. Return terbaik
+    fitness = [_ga_path_cost(G, p) for p in population]
+    best    = population[min(range(len(population)), key=lambda i: fitness[i])]
+    ms      = (time.perf_counter() - t0) * 1000
+    return RouteResult.build(
+        G, algo.name, scenario_name, source_node, target_node, best, ms,
+        metadata={
+            "generations":    algo.GENERATIONS,
+            "population":     algo.POPULATION_SIZE,
+            "crossover_rate": algo.CROSSOVER_RATE,
+            "mutation_rate":  algo.MUTATION_RATE,
+        },
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# SANDY
+# ──────────────────────────────────────────────────────────────
+
+class SandyGA(BaseRoutingAlgorithm):
+    """
+    Sandy — GA dengan seleksi ketat + mutasi moderat.
+
+    Strategi:
+    - Populasi besar (50) supaya eksplorasi awal luas.
+    - Tournament size 5 → tekanan seleksi tinggi, konvergen lebih cepat.
+    - Crossover rate tinggi (0.85) → banyak kombinasi path baru.
+    - Mutasi (0.2) moderat supaya tidak terlalu acak.
+    - Custom crossover: pilih titik pivot terdekat ke tengah path
+      supaya segmen yang digabung lebih seimbang.
+    """
+    name        = "sandy_ga"
+    description = "Sandy — GA (pop=50, gen=60, tour=5)"
+
+    # ── TUNING ZONE Sandy ─────────────────────────────────────
+    POPULATION_SIZE = 50
+    GENERATIONS     = 60
+    CROSSOVER_RATE  = 0.85
+    MUTATION_RATE   = 0.2
+    TOURNAMENT_SIZE = 5
+    RANDOM_SEED     = 42
     # ─────────────────────────────────────────────────────────
 
+    def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
+        # Pilih pivot = node bersama paling dekat ke tengah p1.
+        # Kalau ada beberapa yang sama jaraknya, pilih acak pakai rng.
+        set1   = set(p1[1:-1])
+        common = [n for n in p2[1:-1] if n in set1]
+        if not common:
+            return p1[:]
+        mid      = len(p1) // 2
+        min_dist = min(abs(p1.index(n) - mid) for n in common)
+        best     = [n for n in common if abs(p1.index(n) - mid) == min_dist]
+        pivot    = rng.choice(best)
+        i1       = p1.index(pivot)
+        i2       = p2.index(pivot)
+        return p1[:i1] + p2[i2:]
+
+    def _mutate(self, G, path: list, rng: random.Random) -> list:
+        return _ga_mutate(G, path, rng)   # pakai default
+
     def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0  = time.perf_counter()
-        rng = random.Random(self.RANDOM_SEED)
-
-        # ── 1. Populasi awal ──────────────────────────────────
-        population = []
-        for _ in range(self.POPULATION_SIZE):
-            p = _ga_random_path(G, source_node, target_node, rng)
-            if p:
-                population.append(p)
-
-        # Fallback kalau populasi kosong (graph terlalu sparse)
-        if not population:
-            try:
-                route = nx.shortest_path(G, source_node, target_node,
-                                         weight="travel_time")
-            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-                ms = (time.perf_counter() - t0) * 1000
-                return RouteResult.failure(self.name, scenario_name,
-                                           source_node, target_node, str(e), ms)
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.build(G, self.name, scenario_name,
-                                     source_node, target_node, route, ms)
-
-        # ── 2. Evolusi ────────────────────────────────────────
-        for _ in range(self.GENERATIONS):
-            fitness = [_ga_path_cost(G, p) for p in population]
-            best_idx = min(range(len(population)), key=lambda i: fitness[i])
-            elite = population[best_idx]
-
-            new_pop = [elite]  # elitisme: simpan yang terbaik
-            while len(new_pop) < self.POPULATION_SIZE:
-                parent1 = _ga_tournament(population, fitness,
-                                         self.TOURNAMENT_SIZE, rng)
-                if rng.random() < self.CROSSOVER_RATE:
-                    parent2 = _ga_tournament(population, fitness,
-                                             self.TOURNAMENT_SIZE, rng)
-                    child = _ga_crossover(parent1, parent2, rng)
-                else:
-                    child = parent1[:]
-
-                if rng.random() < self.MUTATION_RATE:
-                    child = _ga_mutate(G, child, rng)
-
-                new_pop.append(child)
-            population = new_pop
-
-        # ── 3. Ambil individu terbaik ─────────────────────────
-        fitness = [_ga_path_cost(G, p) for p in population]
-        best    = population[min(range(len(population)), key=lambda i: fitness[i])]
-
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(
-            G, self.name, scenario_name, source_node, target_node, best, ms,
-            metadata={
-                "generations":   self.GENERATIONS,
-                "population":    self.POPULATION_SIZE,
-                "crossover_rate": self.CROSSOVER_RATE,
-                "mutation_rate": self.MUTATION_RATE,
-            },
-        )
+        return _ga_run(self, G, source_node, target_node, scenario_name)
 
 
-class TeamBGA(BaseRoutingAlgorithm):
+# ──────────────────────────────────────────────────────────────
+# BURHAN — TODO
+# ──────────────────────────────────────────────────────────────
+
+class BurhanGA(BaseRoutingAlgorithm):
     """
-    ── TEAM B — Genetic Algorithm ───────────────────────────────
-    Sama dengan Team A, tapi parameter default berbeda.
-    Tim B bebas mengubah TUNING ZONE dan meng-override metode GA
-    untuk mencoba strategi yang lebih baik.
+    Burhan — isi TUNING ZONE dan strategi kamu di sini.
 
-    Contoh hal yang bisa dicoba Tim B:
-      - Naikkan GENERATIONS atau POPULATION_SIZE
-      - Turunkan MUTATION_RATE supaya konvergen lebih cepat
-      - Override _crossover → coba crossover berbeda
-    ─────────────────────────────────────────────────────────────
+    Cara:
+    1. Ubah angka di TUNING ZONE sesuai eksperimen kamu.
+    2. (Opsional) Override _crossover atau _mutate dengan
+       strategi yang berbeda dari Sandy.
+    3. Jalankan: python main.py compare
     """
-    name        = "team_b_ga"
-    description = "Team B — Genetic Algorithm"
+    name        = "burhan_ga"
+    description = "Burhan — GA (belum dituning)"
 
-    # ── TUNING ZONE Team B ────────────────────────────────────
-    POPULATION_SIZE = 20     # lebih kecil → tiap generasi lebih cepat
-    GENERATIONS     = 80     # lebih banyak generasi untuk kompensasi
-    CROSSOVER_RATE  = 0.7
-    MUTATION_RATE   = 0.4    # mutasi lebih agresif → eksplorasi lebih luas
-    TOURNAMENT_SIZE = 5      # tekanan seleksi lebih tinggi
-    RANDOM_SEED     = 7
+    # ── TUNING ZONE Burhan -- UBAH ANGKA INI ─────────────────
+    POPULATION_SIZE = 30    # TODO: coba variasikan
+    GENERATIONS     = 50    # TODO: coba variasikan
+    CROSSOVER_RATE  = 0.8   # TODO: coba variasikan
+    MUTATION_RATE   = 0.3   # TODO: coba variasikan
+    TOURNAMENT_SIZE = 3     # TODO: coba variasikan
+    RANDOM_SEED     = 10
     # ─────────────────────────────────────────────────────────
 
+    def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
+        return _ga_crossover(p1, p2, rng)   # TODO: ganti dengan strategimu
+
+    def _mutate(self, G, path: list, rng: random.Random) -> list:
+        return _ga_mutate(G, path, rng)     # TODO: ganti dengan strategimu
+
     def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0  = time.perf_counter()
-        rng = random.Random(self.RANDOM_SEED)
+        return _ga_run(self, G, source_node, target_node, scenario_name)
 
-        # ── 1. Populasi awal ──────────────────────────────────
-        population = []
-        for _ in range(self.POPULATION_SIZE):
-            p = _ga_random_path(G, source_node, target_node, rng)
-            if p:
-                population.append(p)
 
-        if not population:
-            try:
-                route = nx.shortest_path(G, source_node, target_node,
-                                         weight="travel_time")
-            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-                ms = (time.perf_counter() - t0) * 1000
-                return RouteResult.failure(self.name, scenario_name,
-                                           source_node, target_node, str(e), ms)
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.build(G, self.name, scenario_name,
-                                     source_node, target_node, route, ms)
+# ──────────────────────────────────────────────────────────────
+# BIMO — TODO
+# ──────────────────────────────────────────────────────────────
 
-        # ── 2. Evolusi ────────────────────────────────────────
-        for _ in range(self.GENERATIONS):
-            fitness = [_ga_path_cost(G, p) for p in population]
-            best_idx = min(range(len(population)), key=lambda i: fitness[i])
-            elite = population[best_idx]
+class BimoGA(BaseRoutingAlgorithm):
+    """
+    Bimo — isi TUNING ZONE dan strategi kamu di sini.
 
-            new_pop = [elite]
-            while len(new_pop) < self.POPULATION_SIZE:
-                parent1 = _ga_tournament(population, fitness,
-                                         self.TOURNAMENT_SIZE, rng)
-                if rng.random() < self.CROSSOVER_RATE:
-                    parent2 = _ga_tournament(population, fitness,
-                                             self.TOURNAMENT_SIZE, rng)
-                    child = _ga_crossover(parent1, parent2, rng)
-                else:
-                    child = parent1[:]
+    Cara:
+    1. Ubah angka di TUNING ZONE sesuai eksperimen kamu.
+    2. (Opsional) Override _crossover atau _mutate dengan
+       strategi yang berbeda dari Sandy.
+    3. Jalankan: python main.py compare
+    """
+    name        = "bimo_ga"
+    description = "Bimo — GA (belum dituning)"
 
-                if rng.random() < self.MUTATION_RATE:
-                    child = _ga_mutate(G, child, rng)
+    # ── TUNING ZONE Bimo -- UBAH ANGKA INI ───────────────────
+    POPULATION_SIZE = 30    # TODO: coba variasikan
+    GENERATIONS     = 50    # TODO: coba variasikan
+    CROSSOVER_RATE  = 0.8   # TODO: coba variasikan
+    MUTATION_RATE   = 0.3   # TODO: coba variasikan
+    TOURNAMENT_SIZE = 3     # TODO: coba variasikan
+    RANDOM_SEED     = 20
+    # ─────────────────────────────────────────────────────────
 
-                new_pop.append(child)
-            population = new_pop
+    def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
+        return _ga_crossover(p1, p2, rng)   # TODO: ganti dengan strategimu
 
-        # ── 3. Ambil individu terbaik ─────────────────────────
-        fitness = [_ga_path_cost(G, p) for p in population]
-        best    = population[min(range(len(population)), key=lambda i: fitness[i])]
+    def _mutate(self, G, path: list, rng: random.Random) -> list:
+        return _ga_mutate(G, path, rng)     # TODO: ganti dengan strategimu
 
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(
-            G, self.name, scenario_name, source_node, target_node, best, ms,
-            metadata={
-                "generations":   self.GENERATIONS,
-                "population":    self.POPULATION_SIZE,
-                "crossover_rate": self.CROSSOVER_RATE,
-                "mutation_rate": self.MUTATION_RATE,
-            },
-        )
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        return _ga_run(self, G, source_node, target_node, scenario_name)
+
+
+# ──────────────────────────────────────────────────────────────
+# GERALD — TODO
+# ──────────────────────────────────────────────────────────────
+
+class GeraldGA(BaseRoutingAlgorithm):
+    """
+    Gerald — isi TUNING ZONE dan strategi kamu di sini.
+
+    Cara:
+    1. Ubah angka di TUNING ZONE sesuai eksperimen kamu.
+    2. (Opsional) Override _crossover atau _mutate dengan
+       strategi yang berbeda dari Sandy.
+    3. Jalankan: python main.py compare
+    """
+    name        = "gerald_ga"
+    description = "Gerald — GA (belum dituning)"
+
+    # ── TUNING ZONE Gerald -- UBAH ANGKA INI ─────────────────
+    POPULATION_SIZE = 30    # TODO: coba variasikan
+    GENERATIONS     = 50    # TODO: coba variasikan
+    CROSSOVER_RATE  = 0.8   # TODO: coba variasikan
+    MUTATION_RATE   = 0.3   # TODO: coba variasikan
+    TOURNAMENT_SIZE = 3     # TODO: coba variasikan
+    RANDOM_SEED     = 30
+    # ─────────────────────────────────────────────────────────
+
+    def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
+        return _ga_crossover(p1, p2, rng)   # TODO: ganti dengan strategimu
+
+    def _mutate(self, G, path: list, rng: random.Random) -> list:
+        return _ga_mutate(G, path, rng)     # TODO: ganti dengan strategimu
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        return _ga_run(self, G, source_node, target_node, scenario_name)
 
 
 # ──────────────────────────────────────────────────────────────

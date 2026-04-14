@@ -1,0 +1,103 @@
+2026-04-14 16:24:26,605 [INFO] Surabaya Public Facility Routing Platform
+2026-04-14 16:24:26,605 [INFO] Place : Surabaya, Indonesia
+2026-04-14 16:24:26,605 [INFO] Data  : C:\Users\sandx\OneDrive\Documents\Univ\Semester 6\TugasSCRouting\data
+2026-04-14 16:24:26,605 [INFO] Logs  : C:\Users\sandx\OneDrive\Documents\Univ\Semester 6\TugasSCRouting\logs
+2026-04-14 16:24:26,605 [INFO] 
+2026-04-14 16:24:26,606 [INFO] ============================================================
+2026-04-14 16:24:26,606 [INFO] STEP: COMPARE
+2026-04-14 16:24:26,606 [INFO] ============================================================
+2026-04-14 16:24:29,332 [INFO] Loading road network and facilities...
+2026-04-14 16:24:34,498 [INFO] Graph: 36681 nodes  |  Facilities: 4081
+2026-04-14 16:24:34,498 [INFO] Registered algorithms (7):
+2026-04-14 16:24:34,498 [INFO]   [dijkstra_time]  Dijkstra — minimise travel time (fastest route)
+2026-04-14 16:24:34,499 [INFO]   [dijkstra_distance]  Dijkstra — minimise distance in metres (shortest path)
+2026-04-14 16:24:34,499 [INFO]   [astar_time]  A* — minimise travel time with haversine heuristic
+2026-04-14 16:24:34,499 [INFO]   [sandy_ga]  Sandy — GA (pop=50, gen=60, tour=5)
+2026-04-14 16:24:34,499 [INFO]   [burhan_ga]  Burhan — GA (belum dituning)
+2026-04-14 16:24:34,499 [INFO]   [bimo_ga]  Bimo — GA (belum dituning)
+2026-04-14 16:24:34,499 [INFO]   [gerald_ga]  Gerald — GA (belum dituning)
+2026-04-14 16:24:34,500 [INFO] 
+Building benchmark scenarios...
+2026-04-14 16:24:34,500 [INFO]   [darmo_to_rsu_haji]  RS Darmo -> RSU Haji Surabaya
+2026-04-14 16:24:34,500 [INFO]   [polsek_genteng_to_rs_darmo]  Polsek Genteng -> RS Darmo
+2026-04-14 16:24:34,500 [INFO]   [national_to_rs_ramelan]  National Hospital -> RS Angkatan Laut Dr. Ramelan
+2026-04-14 16:24:34,500 [INFO]   [polsek_rungkut_to_rs_onkologi]  Polsek Rungkut -> RS Onkologi
+2026-04-14 16:24:34,500 [INFO]   [ciputra_to_rsu_haji]  Ciputra Hospital -> RSU Haji Surabaya
+2026-04-14 16:24:34,500 [INFO] 
+Benchmark: 7 algorithms × 5 scenarios
+2026-04-14 16:24:34,500 [INFO] 
+  Scenario [darmo_to_rsu_haji]: RS Darmo -> RSU Haji Surabaya
+2026-04-14 16:24:34,518 [INFO]     OK    [dijkstra_time         ]  time= 10.0min  dist= 6.49km  cpu=  16.9ms
+2026-04-14 16:24:34,532 [INFO]     OK    [dijkstra_distance     ]  time= 11.3min  dist= 6.27km  cpu=  13.5ms
+2026-04-14 16:24:34,534 [INFO]     OK    [astar_time            ]  time= 10.4min  dist= 6.50km  cpu=   1.5ms
+2026-04-14 16:24:35,948 [INFO]     OK    [sandy_ga              ]  time= 10.0min  dist= 6.49km  cpu=1413.9ms
+2026-04-14 16:24:36,695 [INFO]     OK    [burhan_ga             ]  time= 10.0min  dist= 6.49km  cpu= 747.0ms
+2026-04-14 16:24:37,430 [INFO]     OK    [bimo_ga               ]  time= 10.0min  dist= 6.49km  cpu= 734.7ms
+2026-04-14 16:24:38,329 [INFO]     OK    [gerald_ga             ]  time= 10.0min  dist= 6.49km  cpu= 898.3ms
+2026-04-14 16:24:38,330 [INFO] 
+  Scenario [polsek_genteng_to_rs_darmo]: Polsek Genteng -> RS Darmo
+2026-04-14 16:24:38,336 [INFO]     OK    [dijkstra_time         ]  time=  5.3min  dist= 4.69km  cpu=   4.8ms
+2026-04-14 16:24:38,342 [INFO]     OK    [dijkstra_distance     ]  time=  6.9min  dist= 4.32km  cpu=   6.1ms
+2026-04-14 16:24:38,343 [INFO]     OK    [astar_time            ]  time=  6.0min  dist= 4.60km  cpu=   0.5ms
+2026-04-14 16:24:38,795 [INFO]     OK    [sandy_ga              ]  time=  5.3min  dist= 4.69km  cpu= 452.2ms
+2026-04-14 16:24:39,076 [INFO]     OK    [burhan_ga             ]  time=  5.3min  dist= 4.69km  cpu= 279.5ms
+2026-04-14 16:24:39,331 [INFO]     OK    [bimo_ga               ]  time=  5.3min  dist= 4.69km  cpu= 255.0ms
+2026-04-14 16:24:39,556 [INFO]     OK    [gerald_ga             ]  time=  5.3min  dist= 4.69km  cpu= 224.5ms
+2026-04-14 16:24:39,556 [INFO] 
+  Scenario [national_to_rs_ramelan]: National Hospital -> RS Angkatan Laut Dr. Ramelan
+2026-04-14 16:24:39,592 [INFO]     OK    [dijkstra_time         ]  time= 14.0min  dist= 9.64km  cpu=  35.7ms
+2026-04-14 16:24:39,625 [INFO]     OK    [dijkstra_distance     ]  time= 15.3min  dist= 9.50km  cpu=  32.4ms
+2026-04-14 16:24:39,628 [INFO]     OK    [astar_time            ]  time= 14.0min  dist= 9.64km  cpu=   1.8ms
+2026-04-14 16:24:42,349 [INFO]     OK    [sandy_ga              ]  time= 14.0min  dist= 9.64km  cpu=2721.2ms
+2026-04-14 16:24:43,954 [INFO]     OK    [burhan_ga             ]  time= 14.0min  dist= 9.64km  cpu=1604.4ms
+2026-04-14 16:24:45,620 [INFO]     OK    [bimo_ga               ]  time= 14.0min  dist= 9.64km  cpu=1664.9ms
+2026-04-14 16:24:47,231 [INFO]     OK    [gerald_ga             ]  time= 14.0min  dist= 9.64km  cpu=1611.0ms
+2026-04-14 16:24:47,231 [INFO] 
+  Scenario [polsek_rungkut_to_rs_onkologi]: Polsek Rungkut -> RS Onkologi
+2026-04-14 16:24:47,245 [INFO]     OK    [dijkstra_time         ]  time= 12.9min  dist= 8.30km  cpu=  13.9ms
+2026-04-14 16:24:47,261 [INFO]     OK    [dijkstra_distance     ]  time= 13.7min  dist= 8.04km  cpu=  15.1ms
+2026-04-14 16:24:47,267 [INFO]     OK    [astar_time            ]  time= 12.9min  dist= 8.30km  cpu=   5.3ms
+2026-04-14 16:24:48,927 [INFO]     OK    [sandy_ga              ]  time= 12.9min  dist= 8.30km  cpu=1659.5ms
+2026-04-14 16:24:49,755 [INFO]     OK    [burhan_ga             ]  time= 12.9min  dist= 8.30km  cpu= 827.3ms
+2026-04-14 16:24:50,597 [INFO]     OK    [bimo_ga               ]  time= 12.9min  dist= 8.30km  cpu= 842.1ms
+2026-04-14 16:24:51,337 [INFO]     OK    [gerald_ga             ]  time= 12.9min  dist= 8.30km  cpu= 739.9ms
+2026-04-14 16:24:51,338 [INFO] 
+  Scenario [ciputra_to_rsu_haji]: Ciputra Hospital -> RSU Haji Surabaya
+2026-04-14 16:24:51,425 [INFO]     OK    [dijkstra_time         ]  time= 27.2min  dist=18.34km  cpu=  87.1ms
+2026-04-14 16:24:51,516 [INFO]     OK    [dijkstra_distance     ]  time= 27.7min  dist=18.30km  cpu=  89.2ms
+2026-04-14 16:24:51,521 [INFO]     OK    [astar_time            ]  time= 27.2min  dist=18.34km  cpu=   5.0ms
+2026-04-14 16:24:59,391 [INFO]     OK    [sandy_ga              ]  time= 27.2min  dist=18.34km  cpu=7869.5ms
+2026-04-14 16:25:03,945 [INFO]     OK    [burhan_ga             ]  time= 27.2min  dist=18.34km  cpu=4554.1ms
+2026-04-14 16:25:08,295 [INFO]     OK    [bimo_ga               ]  time= 27.2min  dist=18.34km  cpu=4348.1ms
+2026-04-14 16:25:12,663 [INFO]     OK    [gerald_ga             ]  time= 27.2min  dist=18.34km  cpu=4367.9ms
+2026-04-14 16:25:12,671 [INFO] 
+BENCHMARK SUMMARY
+============================================================
+                   solved  avg_time_min  avg_dist_km  avg_cpu_ms  best_time_min  worst_time_min
+algorithm                                                                                      
+astar_time              5        14.109        9.477       2.820          6.011          27.155
+bimo_ga                 5        13.892        9.494    1568.948          5.291          27.155
+burhan_ga               5        13.892        9.494    1602.497          5.291          27.155
+dijkstra_distance       5        15.003        9.285      31.245          6.909          27.730
+dijkstra_time           5        13.892        9.494      31.704          5.291          27.155
+gerald_ga               5        13.892        9.494    1568.300          5.291          27.155
+sandy_ga                5        13.892        9.494    2823.240          5.291          27.155
+2026-04-14 16:25:12,675 [INFO] Saved -> comparison_results.csv
+2026-04-14 16:25:12,677 [INFO] Saved -> comparison_summary.csv
+2026-04-14 16:25:12,678 [INFO] 
+Generating visualisations...
+2026-04-14 16:25:12,687 [INFO]   Map -> comparison_map_darmo_to_rsu_haji.html
+2026-04-14 16:25:12,700 [INFO]   Map -> comparison_map_polsek_genteng_to_rs_darmo.html
+2026-04-14 16:25:12,707 [INFO]   Map -> comparison_map_national_to_rs_ramelan.html
+2026-04-14 16:25:12,716 [INFO]   Map -> comparison_map_polsek_rungkut_to_rs_onkologi.html
+2026-04-14 16:25:12,725 [INFO]   Map -> comparison_map_ciputra_to_rsu_haji.html
+2026-04-14 16:25:13,115 [INFO]   Chart -> comparison_chart.png
+2026-04-14 16:25:13,115 [INFO] 
+Outputs in data/:
+2026-04-14 16:25:13,116 [INFO]   comparison_results.csv    raw results per algorithm/scenario
+2026-04-14 16:25:13,116 [INFO]   comparison_summary.csv    aggregate stats per algorithm
+2026-04-14 16:25:13,116 [INFO]   comparison_chart.png      travel time + speed bar charts
+2026-04-14 16:25:13,116 [INFO]   comparison_map_*.html     route overlay maps (open in browser)
+2026-04-14 16:25:13,117 [INFO] [compare] finished in 46.5s
+2026-04-14 16:25:13,117 [INFO] 
+2026-04-14 16:25:13,117 [INFO] All done in 46.5s

@@ -20,7 +20,21 @@ log = logging.getLogger(__name__)
 ROUTE_COLORS = [
     "#E63946", "#2196F3", "#4CAF50", "#FF9800",
     "#9C27B0", "#00BCD4", "#FF5722", "#607D8B",
+    "#D81B60",
 ]
+
+ROUTE_COLOR_BY_ALGO = {
+    "dijkstra_time": "#9C27B0",
+    "dijkstra_distance": "#795548",
+    "astar_time": "#00BCD4",
+    "astar_distance": "#607D8B",
+    "christofides": "#2ECC71",
+    "sandy_ga": "#E63946",
+    "burhan_ga": "#2196F3",
+    "bimo_ga": "#4CAF50",
+    "gerald_ga": "#FF9800",
+    "gerald_sa": "#D81B60",
+}
 
 
 def _route_street_names(G, route: list) -> list:
@@ -68,7 +82,10 @@ class ResultVisualiser:
         for i, r in enumerate(results):
             if not r.found or len(r.route) < 2:
                 continue
-            color = ROUTE_COLORS[i % len(ROUTE_COLORS)]
+            color = ROUTE_COLOR_BY_ALGO.get(
+                r.algorithm_name,
+                ROUTE_COLORS[i % len(ROUTE_COLORS)],
+            )
 
             # Ambil koordinat (lat, lon) tiap node dalam route
             coords = []
@@ -207,7 +224,7 @@ class ResultVisualiser:
             offset = (i - len(algorithms) / 2 + 0.5) * width
             ax.bar(x + offset, times, width,
                    label=algo,
-                   color=ROUTE_COLORS[i % len(ROUTE_COLORS)],
+                   color=ROUTE_COLOR_BY_ALGO.get(algo, ROUTE_COLORS[i % len(ROUTE_COLORS)]),
                    alpha=0.85)
         ax.set_xticks(x)
         ax.set_xticklabels(scenarios, rotation=20, ha="right")
@@ -222,7 +239,10 @@ class ResultVisualiser:
         avg_cpu = [ok[ok["algorithm"] == a]["computation_ms"].mean() for a in algorithms]
         bars = ax2.barh(
             list(algorithms), avg_cpu,
-            color=[ROUTE_COLORS[i % len(ROUTE_COLORS)] for i in range(len(algorithms))],
+            color=[
+                ROUTE_COLOR_BY_ALGO.get(a, ROUTE_COLORS[i % len(ROUTE_COLORS)])
+                for i, a in enumerate(algorithms)
+            ],
             alpha=0.85,
         )
         for bar in bars:

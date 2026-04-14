@@ -294,8 +294,8 @@ def build_scenarios(G: nx.MultiDiGraph,
 def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime,
-        SandyGA, BurhanGA, BimoGA, GeraldGA,
-        EXAMPLE_SCENARIOS,
+        SandyGA, BurhanGA, BimoGA, GeraldGA, GeraldSimulatedAnnealing,
+        EXAMPLE_SCENARIOS, MULTIPLE_DESTINATION_SCENARIOS,
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -335,14 +335,17 @@ def run_platform(cfg):
     registry.register(BurhanGA())         # Burhan
     registry.register(BimoGA())           # Bimo
     registry.register(GeraldGA())         # Gerald
+    registry.register(GeraldSimulatedAnnealing()) # Gerald: SA rute terpendek
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────
-    # Gunakan skenario konkret dari EXAMPLE_SCENARIOS (fasilitas Surabaya nyata).
+    # Gunakan skenario multiple destination: satu source ke beberapa target.
+    # Kalau mau kembali ke contoh lama, ganti baris di bawah menjadi:
+    #   scenarios = EXAMPLE_SCENARIOS[:cfg.N_SCENARIOS]
     # Kalau mau pakai auto-generate, ganti baris di bawah dengan:
     #   scenarios = build_scenarios(G, fac, n=cfg.N_SCENARIOS)
     log.info("\nBuilding benchmark scenarios...")
-    scenarios = EXAMPLE_SCENARIOS[:cfg.N_SCENARIOS]
+    scenarios = MULTIPLE_DESTINATION_SCENARIOS[:cfg.N_SCENARIOS]
     if not scenarios:
         log.error("Could not build scenarios — check that extraction ran successfully.")
         return

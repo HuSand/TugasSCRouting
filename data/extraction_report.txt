@@ -1,9 +1,8 @@
-Surabaya Public Facility Extraction Report
-Generated: 2026-04-13T14:56:15.701180
+Extraction Report — Surabaya, Indonesia
+Generated: 2026-04-14T20:05:59.785357
 ==================================================
 
 FACILITIES
-  Total: 4081
   education: 1699
   community: 1145
   government: 698
@@ -13,26 +12,37 @@ FACILITIES
 
 ROAD NETWORK
   Nodes: 36681
-  Edges: 89215
+  Edges: 89223
   Avg speed: 29.3 km/h
 
 SNAP QUALITY
-  Mean snap distance: 50.0m
-  Facilities >500m from road: 6
-
-ATTRIBUTE COMPLETENESS
-  name: 99.7%
-  addr:street: 9.1%
-  phone: 2.5%
-  opening_hours: 1.7%
+  Mean: 50.0m
+  >500m: 6 facilities
 
 OUTPUT FILES
+  comparison_chart.png: 112.9 KB
+  comparison_map_ciputra_to_rsu_haji.html: 50.9 KB
+  comparison_map_darmo_to_rsu_haji.html: 33.9 KB
+  comparison_map_genteng_multi_to_rs_darmo.html: 29.6 KB
+  comparison_map_genteng_multi_to_rs_onkologi.html: 41.6 KB
+  comparison_map_genteng_multi_to_rs_ramelan.html: 34.1 KB
+  comparison_map_genteng_multi_to_rsu_haji.html: 35.2 KB
+  comparison_map_national_to_rs_ramelan.html: 40.6 KB
+  comparison_map_polsek_genteng_to_rs_darmo.html: 26.8 KB
+  comparison_map_polsek_rungkut_to_rs_onkologi.html: 34.0 KB
+  comparison_results.csv: 1.90 MB
+  comparison_summary.csv: 0.5 KB
+  evolution_viewer.html: 1.78 MB
+  exploration_report.txt: 0.4 KB
   extraction_report.txt: 0.0 KB
   facilities_clean.csv: 584.7 KB
   facilities_clean.geojson: 1.96 MB
   facilities_raw.geojson: 15.96 MB
   facilities_with_network.csv: 701.6 KB
   facilities_with_network.geojson: 2.22 MB
+  facility_distribution.png: 38.9 KB
   road_network.graphml: 50.28 MB
   road_network_edges.geojson: 49.79 MB
   road_network_nodes.geojson: 8.38 MB
+  snap_distance_histogram.png: 42.3 KB
+  surabaya_facilities_map.html: 4.90 MB

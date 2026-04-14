@@ -28,9 +28,9 @@ POINT (112.6696096 -7.2655948),-7.2655948,112.6696096,Lab Komputer Mardi Sunu,sc
 POINT (112.7539453 -7.2915096),-7.2915096,112.7539453,Scoliosis Correction Clinic,clinic,healthcare,1,Jl. Ngagel Jaya Tengah,"Pucang Sewu, Surabaya, East Java",60283,,,,,,,1685015284,54.7939260422591
 POINT (112.735286 -7.2934043),-7.2934043,112.735286,Medika Utama,clinic,healthcare,1,Jl. Ciliwung,"Darmo, Wonokromo, Kota SBY, Jawa Timur, Indonesia",60241,,,,,,,1685221461,31.36910209286538
 POINT (112.7369126 -7.2818895),-7.2818895,112.7369126,Miracle Aesthetic Clinic Thamrin,clinic,healthcare,1,Jl. M H. Tamrin,"Dr. Sutomo, Surabaya, Surabaya City, East Java, Indonesia",60264,,,,,,,1685220110,98.6120028165561
-POINT (112.7817642 -7.2801062),-7.2801062,112.7817642,Miracle Aesthetic Clinic Kertajaya Indah,clinic,healthcare,1,Jl. Raya Kertajaya Indah Blok O,"Surabaya City, East Java, Indonesia",60282,,,,,,,1682379970,32.31248214973787
+POINT (112.7817642 -7.2801062),-7.2801062,112.7817642,Miracle Aesthetic Clinic Kertajaya Indah,clinic,healthcare,1,Jl. Raya Kertajaya Indah Blok O,"Surabaya City, East Java, Indonesia",60282,,,,,,,1682379970,32.312482149737875
 POINT (112.7487629 -7.2970532),-7.2970532,112.7487629,Gereja Pantekosta di Indonesia Barat Jemaat Bukit Zaitun,place_of_worship,community,4,Jl. Ngagel Mulyo I,"Ngagelrejo, Wonokromo, Surabaya",60245,,,,,,,1685016332,5.411601948774212
-POINT (112.7488414 -7.2533533),-7.2533533,112.7488414,Dr. Silvester Hariwidodo D.Spa,doctors,healthcare,1,Jl. Ketupa,"Tambaksari, Surabaya, East Java",60136,,,,,,,9596597051,19.281164176280136
+POINT (112.7488414 -7.2533533),-7.2533533,112.7488414,Dr. Silvester Hariwidodo D.Spa,doctors,healthcare,1,Jl. Ketupa,"Tambaksari, Surabaya, East Java",60136,,,,,,,9596597051,19.281164176280132
 POINT (112.7024041 -7.2833731),-7.2833731,112.7024041,Family Dental Care,dentist,healthcare,1,"JL. Kupang Indah 16,","Dukuh Kupang, Dukuh Pakis, Surabaya",60225,,,,,,,4501888683,149.59820204105446
 POINT (112.7436009 -7.2623101),-7.2623101,112.7436009,Taman Prestasi,ferry_terminal,transport,3,,,,,https://tiketwisata.surabaya.go.id,,Pemerintah Kota Surabaya,,,1682373505,113.06708882699914
 POINT (112.7623083 -7.2753159),-7.2753159,112.7623083,ApotekBoy_Dr.Franky,pharmacy,healthcare,1,Jl.Raya Menur No.4,,,0315039881,,,,,,7979401531,7.837333003188101
@@ -392,7 +392,7 @@ POINT (112.7459777 -7.285663),-7.285663,112.7459777,KPP Pratama Surabaya Tegalsa
 POINT (112.7286504 -7.3449307),-7.3449307,112.7286504,Universitas Pelita Harapan Surabaya,university,education,2,,,,,,,,,,5009869241,48.725667529296764
 POINT (112.7390381 -7.307135),-7.307135,112.7390381,SD Muhammadiyah 6 Surabaya,school,education,2,,,,,,,,,,1719470310,24.011930102562346
 POINT (112.7251207 -7.3246162),-7.3246162,112.7251207,Klinik Pratama Adi Hayati Ketintang,clinic,healthcare,1,,,,,,,,,,1722952492,119.63132003716758
-POINT (112.7390773 -7.3068265),-7.3068265,112.7390773,SMA Muhammadiyah 3 Surabaya,school,education,2,,,,,,,,,,1719470266,11.57245710917358
+POINT (112.7390773 -7.3068265),-7.3068265,112.7390773,SMA Muhammadiyah 3 Surabaya,school,education,2,,,,,,,,,,1719470266,11.572457109173579
 POINT (112.739056 -7.3070555),-7.3070555,112.739056,SMP Muhammadiyah 4,school,education,2,,,,,,,,,,1719470266,21.4611598782599
 POINT (112.7316606 -7.3087325),-7.3087325,112.7316606,Praktek Dokter Dr. Sofwan Hadi,doctors,healthcare,1,,,,,,,,,,1722907043,6.668196099294151
 POINT (112.733432 -7.2425526),-7.2425526,112.733432,KPP Pratama Surabaya Krembangan Gedung Keuangan Negara Surabaya I,government,government,3,,,,,,,,,,267078984,72.05036884073326
@@ -2806,7 +2806,7 @@ POINT (112.69703858552484 -7.29196975245409),-7.29196975245409,112.6970385855248
 POINT (112.66567623946398 -7.225081167295559),-7.225081167295559,112.66567623946398,Kantor Kelurahan Tambak Sari Oso,government,government,3,,,,,,,,,village_office,5532342632,8.211811070173491
 POINT (112.71999570126036 -7.271767510604126),-7.271767510604126,112.71999570126036,Masjid Al Amien,place_of_worship,community,4,,,,,,,,,mosque,1720772221,15.931341782646614
 POINT (112.72005187988066 -7.271416329061916),-7.271416329061916,112.72005187988066,Puskesmas Banyu Urip,clinic,healthcare,1,,,,,,,,,clinic,4527536523,26.393277505804736
-POINT (112.74491966047292 -7.321950802878352),-7.321950802878352,112.74491966047292,Surabaya Eye Clinic,clinic,healthcare,1,,,,,,,,,clinic,4564493619,64.02562046218988
+POINT (112.74491966047292 -7.321950802878352),-7.321950802878352,112.74491966047292,Surabaya Eye Clinic,clinic,healthcare,1,,,,,,,,,clinic,4564493619,64.02562046218989
 POINT (112.74636270653747 -7.324219167183923),-7.324219167183923,112.74636270653747,SMP Dharma Wanita,school,education,2,,,,,,,,,school,1719509850,126.06518082424586
 POINT (112.67268226545443 -7.308313156792431),-7.308313156792431,112.67268226545443,SD Negeri Lidah Wetan 4/566,school,education,2,,,,,,,,,,4519864554,40.071180273215234
 POINT (112.66586662804151 -7.307240803665825),-7.307240803665825,112.66586662804151,Kantor Kelurahan Lidah Wetan,government,government,3,,,,,,,,,,1721842192,31.842650747088495

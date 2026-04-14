@@ -544,8 +544,127 @@ class GeraldGA(BaseRoutingAlgorithm):
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
+class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
+    """
+    Gerald - Simulated Annealing untuk mencari rute terpendek.
 
-# ──────────────────────────────────────────────────────────────
+    Satu kandidat solusi adalah satu path valid dari source ke target. Cost
+    dihitung dari total edge length dalam meter. Neighbor dibuat dengan
+    memilih dua node pada path lalu mengganti sub-path di antaranya dengan
+    shortest path bernois agar eksplorasi tetap beragam.
+    """
+    name        = "gerald_simulated_annealing"
+    description = "Gerald - Simulated Annealing shortest distance"
+
+    INITIAL_TEMPERATURE = 1500.0
+    COOLING_RATE        = 0.985
+    MIN_TEMPERATURE     = 0.1
+    MAX_ITERATIONS      = 700
+    RANDOM_SEED         = 77
+
+    def _distance_cost(self, G, path: list) -> float:
+        total = 0.0
+        for u, v in zip(path[:-1], path[1:]):
+            data = G.get_edge_data(u, v)
+            if data is None:
+                return float("inf")
+            best = min(data.values(), key=lambda d: float(d.get("length", 999999)))
+            total += float(best.get("length", 999999))
+        return total
+
+    def _randomised_shortest_path(self, G, source: int, target: int, rng: random.Random):
+        def noisy_length(u, v, data):
+            best = min(data.values(), key=lambda d: float(d.get("length", 999999)))
+            length = float(best.get("length", 999999))
+            return length * rng.uniform(0.75, 1.35)
+
+        return nx.shortest_path(G, source, target, weight=noisy_length)
+
+    def _initial_path(self, G, source_node: int, target_node: int, rng: random.Random):
+        candidates = []
+        for _ in range(8):
+            try:
+                candidates.append(self._randomised_shortest_path(G, source_node, target_node, rng))
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                pass
+        if not candidates:
+            candidates.append(nx.shortest_path(G, source_node, target_node, weight="length"))
+        return min(candidates, key=lambda p: self._distance_cost(G, p))
+
+    def _neighbor(self, G, path: list, rng: random.Random) -> list:
+        if len(path) < 4:
+            return path[:]
+
+        i = rng.randint(0, len(path) - 3)
+        j = rng.randint(i + 2, len(path) - 1)
+        try:
+            segment = self._randomised_shortest_path(G, path[i], path[j], rng)
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return path[:]
+
+        return path[:i] + segment + path[j + 1:]
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        t0 = time.perf_counter()
+        rng = random.Random(self.RANDOM_SEED)
+        try:
+            current = self._initial_path(G, source_node, target_node, rng)
+            current_cost = self._distance_cost(G, current)
+            best = current[:]
+            best_cost = current_cost
+
+            temperature = self.INITIAL_TEMPERATURE
+            accepted_worse = 0
+            improvements = 0
+            iterations_run = 0
+
+            for iteration in range(self.MAX_ITERATIONS):
+                if temperature <= self.MIN_TEMPERATURE:
+                    break
+                iterations_run = iteration + 1
+
+                candidate = self._neighbor(G, current, rng)
+                candidate_cost = self._distance_cost(G, candidate)
+                if candidate_cost == float("inf"):
+                    temperature *= self.COOLING_RATE
+                    continue
+
+                delta = candidate_cost - current_cost
+                accept = delta <= 0
+                if not accept:
+                    accept = rng.random() < math.exp(-delta / temperature)
+                    if accept:
+                        accepted_worse += 1
+
+                if accept:
+                    current = candidate
+                    current_cost = candidate_cost
+                    if current_cost < best_cost:
+                        best = current[:]
+                        best_cost = current_cost
+                        improvements += 1
+
+                temperature *= self.COOLING_RATE
+
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
+
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name, source_node, target_node, best, ms,
+            metadata={
+                "objective": "distance_m",
+                "iterations": iterations_run,
+                "initial_temperature": self.INITIAL_TEMPERATURE,
+                "cooling_rate": self.COOLING_RATE,
+                "accepted_worse": accepted_worse,
+                "improvements": improvements,
+                "best_distance_m": round(best_cost, 3),
+            },
+        )
+
+
 # EXAMPLE SCENARIOS
 # Rute konkret pakai fasilitas publik Surabaya beneran.
 # Dipakai benchmark sebagai gantinya auto-generate random.
@@ -634,6 +753,55 @@ EXAMPLE_SCENARIOS = [
         source_label="Polsek Benowo",
         target_label="RS Onkologi",
         source_coords=(-7.2359, 112.6076),
+        target_coords=(-7.2909, 112.7893),
+    ),
+]
+
+
+# Multiple destination scenario:
+# satu titik awal yang sama diuji ke beberapa tujuan berbeda.
+# Karena kontrak Scenario masih source -> target tunggal, setiap tujuan
+# dimodelkan sebagai satu Scenario agar benchmark, chart, map, dan log
+# tetap kompatibel.
+MULTIPLE_DESTINATION_SCENARIOS = [
+    Scenario(
+        name="genteng_multi_to_rs_darmo",
+        description="Multiple destination: Polsek Genteng -> RS Darmo",
+        source_node=5589485735,
+        target_node=1685220157,
+        source_label="Polsek Genteng",
+        target_label="RS Darmo",
+        source_coords=(-7.2556, 112.7483),
+        target_coords=(-7.2874, 112.7382),
+    ),
+    Scenario(
+        name="genteng_multi_to_rsu_haji",
+        description="Multiple destination: Polsek Genteng -> RSU Haji Surabaya",
+        source_node=5589485735,
+        target_node=4332874690,
+        source_label="Polsek Genteng",
+        target_label="RSU Haji Surabaya",
+        source_coords=(-7.2556, 112.7483),
+        target_coords=(-7.2828, 112.7798),
+    ),
+    Scenario(
+        name="genteng_multi_to_rs_ramelan",
+        description="Multiple destination: Polsek Genteng -> RS Angkatan Laut Dr. Ramelan",
+        source_node=5589485735,
+        target_node=1719470350,
+        source_label="Polsek Genteng",
+        target_label="RS Angkatan Laut Dr. Ramelan",
+        source_coords=(-7.2556, 112.7483),
+        target_coords=(-7.3093, 112.7382),
+    ),
+    Scenario(
+        name="genteng_multi_to_rs_onkologi",
+        description="Multiple destination: Polsek Genteng -> RS Onkologi",
+        source_node=5589485735,
+        target_node=7059452149,
+        source_label="Polsek Genteng",
+        target_label="RS Onkologi",
+        source_coords=(-7.2556, 112.7483),
         target_coords=(-7.2909, 112.7893),
     ),
 ]

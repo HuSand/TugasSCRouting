@@ -230,6 +230,19 @@ class BenchmarkRunner:
         nodes = scenario.node_sequence
         labels = scenario.label_sequence
         coords = scenario.coord_sequence
+
+        # Christofides is only meaningful for multi-stop routing.
+        # Route it once as a tour instead of splitting into per-leg shortest paths.
+        if getattr(algo, "name", "") == "christofides" and scenario.is_multi_stop:
+            if hasattr(algo, "_route_multi_stop"):
+                return algo._route_multi_stop(
+                    G,
+                    nodes,
+                    scenario.name,
+                    source_node=scenario.source_node,
+                    target_node=scenario.target_node,
+                )
+
         if len(nodes) <= 2:
             return algo.safe_run(G, scenario.source_node,
                                  scenario.target_node, scenario.name)
@@ -470,6 +483,7 @@ def build_scenarios(G: nx.MultiDiGraph,
 def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
+        ChristofidesAlgorithm,
         SandyGA, BurhanGA, BimoGA, GeraldGA,
         EXAMPLE_SCENARIOS,
     )
@@ -508,6 +522,7 @@ def run_platform(cfg):
     registry.register(DijkstraDistance()) # baseline: rute terpendek
     registry.register(AStarTime())        # baseline: A* tercepat
     registry.register(AStarDistance())    # baseline: A* terpendek
+    registry.register(ChristofidesAlgorithm())  # Christofides approximation
     registry.register(SandyGA())          # Sandy
     registry.register(BurhanGA())         # Burhan
     registry.register(BimoGA())           # Bimo

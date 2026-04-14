@@ -1,0 +1,22 @@
+Exploration Report
+Generated: 2026-04-14T20:08:45.606693
+==================================================
+
+Total facilities: 4081
+
+CATEGORY BREAKDOWN
+  education: 1699
+  community: 1145
+  government: 698
+  healthcare: 436
+  emergency: 73
+  transport: 30
+
+QUALITY ISSUES (1)
+  - 6 facilities >500m from road network
+
+ATTRIBUTE COMPLETENESS
+  name: 99.7%
+  addr:street: 9.1%
+  phone: 2.5%
+  opening_hours: 1.7%

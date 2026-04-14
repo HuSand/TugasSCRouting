@@ -116,55 +116,63 @@ N_SCENARIOS = 5          # ← tambah angkanya untuk lebih banyak perbandingan
 
 ---
 
-## 5. Cara Tambah Model Tim Kamu
+## 5. Cara Tuning GA Tim Kamu
 
 > Ini bagian terpenting. Baca pelan-pelan ya.
 
-### Konsep dasarnya
-Program akan tanya ke model kamu: **"berapa biaya untuk melewati jalan ini?"**
+### Konsep dasarnya — Genetic Algorithm (GA)
 
-Kamu jawab dengan angka. Makin kecil angkanya, makin dipilih oleh router.  
-Setelah itu, program otomatis cari rute terbaik dan tampilkan di peta.
+GA meniru proses evolusi untuk menemukan rute terbaik:
+
+| Istilah GA | Artinya di routing ini |
+|---|---|
+| **Individu / kromosom** | Satu rute (urutan node dari asal ke tujuan) |
+| **Populasi** | Sekumpulan rute kandidat |
+| **Fitness** | Total `travel_time` rute — makin kecil makin bagus |
+| **Seleksi** | Pilih rute terbaik sebagai "orang tua" (tournament selection) |
+| **Crossover** | Gabungkan dua rute di node persimpangan yang sama |
+| **Mutasi** | Ganti satu segmen rute dengan jalur alternatif |
+| **Elitisme** | Rute terbaik selalu lolos ke generasi berikut |
+
+Setelah N generasi, GA mengembalikan rute terbaik yang ditemukan.
+
+---
 
 ### Langkah-langkahnya
 
 #### Langkah 1 — Buka file `src/routing/algorithms.py`
 
-Cari bagian `TeamAModel` dan `TeamBModel`.
+Cari bagian `TeamAGA` (Tim A) atau `TeamBGA` (Tim B).
 
-#### Langkah 2 — Isi fungsi `predict_edge_weight`
+#### Langkah 2 — Ubah parameter di TUNING ZONE
 
 ```python
-class TeamAModel(BaseRoutingAlgorithm):
-    name        = "team_a"
-    description = "Model Tim A"   # ← ganti deskripsi
+class TeamAGA(BaseRoutingAlgorithm):
+    name        = "team_a_ga"
+    description = "Team A — Genetic Algorithm"
 
-    def predict_edge_weight(self, u, v, edge_data):
-        #
-        # Di sini kamu masukkan model kamu.
-        # edge_data berisi informasi tentang jalan yang sedang dinilai:
-        #
-        #   edge_data["length"]       → panjang jalan (meter)
-        #   edge_data["travel_time"]  → waktu tempuh (detik)
-        #   edge_data["speed_kph"]    → kecepatan (km/jam)
-        #   edge_data["highway"]      → tipe jalan ("primary", "residential", dll)
-        #
-        # Kembalikan satu angka float.
-        # Makin kecil = makin disukai algoritma.
-        #
-
-        # Contoh 1: pakai travel_time langsung (sama kayak Dijkstra biasa)
-        return edge_data.get("travel_time", 9999)
-
-        # Contoh 2: pakai model ML yang sudah kamu train
-        # fitur = [edge_data["length"], edge_data["speed_kph"]]
-        # return float(model_kamu.predict([fitur])[0])
-
-        # Contoh 3: kombinasi bobot manual
-        # return edge_data["travel_time"] * 0.7 + edge_data["length"] * 0.3
+    # ── TUNING ZONE Tim A ─────────────────────────────────────
+    POPULATION_SIZE = 30     # jumlah rute per generasi (lebih besar = lebih beragam)
+    GENERATIONS     = 50     # berapa kali evolusi (lebih banyak = lebih matang)
+    CROSSOVER_RATE  = 0.8    # peluang crossover terjadi (0.0–1.0)
+    MUTATION_RATE   = 0.3    # peluang mutasi terjadi  (0.0–1.0)
+    TOURNAMENT_SIZE = 3      # peserta tournament selection (lebih besar = lebih ketat)
+    RANDOM_SEED     = 42     # set None → hasil non-deterministik setiap run
+    # ─────────────────────────────────────────────────────────
 ```
 
-> **Tim B** — sama persis, tapi isi di bagian `TeamBModel`.
+> **Tim B** — sama persis, tapi ubah di bagian `TeamBGA`.  
+> Coba parameter yang berbeda dari Tim A supaya perbandingannya menarik!
+
+#### Tips tuning parameter
+
+| Parameter | Naikkan jika... | Turunkan jika... |
+|---|---|---|
+| `POPULATION_SIZE` | hasil kurang beragam | benchmark terlalu lambat |
+| `GENERATIONS` | rute masih bisa membaik | benchmark terlalu lambat |
+| `CROSSOVER_RATE` | eksplorasi kurang | sudah konvergen terlalu cepat |
+| `MUTATION_RATE` | terjebak di rute lokal | hasil tidak stabil/acak |
+| `TOURNAMENT_SIZE` | ingin seleksi lebih ketat | ingin lebih banyak variasi |
 
 #### Langkah 3 — Jalankan compare
 
@@ -175,51 +183,24 @@ python main.py compare
 atau pilih **angka 4** di `run.bat`.
 
 #### Hasilnya otomatis muncul di `data/`
-- Peta rute Tim A vs Tim B vs baseline (buka `.html` di browser)
-- Grafik perbandingan waktu dan kecepatan komputasi
+- Peta rute Tim A GA vs Tim B GA vs baseline Dijkstra/A* (buka `.html` di browser)
+- Grafik perbandingan `travel_time` dan kecepatan komputasi
 - Tabel CSV dengan semua angka
 
 ---
 
-### Contoh nyata: model pakai bobot prioritas fasilitas
+### Skenario yang diuji (fasilitas Surabaya nyata)
 
-Misal Tim A punya ide: *"jalan dekat RS dan sekolah harus diprioritaskan"* — implementasinya:
+| # | Nama | Dari | Ke | Konteks |
+|---|---|---|---|---|
+| 1 | `darmo_to_rsu_haji` | RS Darmo | RSU Haji Surabaya | Transfer pasien |
+| 2 | `polsek_genteng_to_rs_darmo` | Polsek Genteng | RS Darmo | Respons darurat polisi |
+| 3 | `national_to_rs_ramelan` | National Hospital | RS Ramelan | Lintas kota barat→selatan |
+| 4 | `polsek_rungkut_to_rs_onkologi` | Polsek Rungkut | RS Onkologi | Darurat area timur |
+| 5 | `ciputra_to_rsu_haji` | Ciputra Hospital | RSU Haji | Rute terpanjang lintas kota |
 
-```python
-def predict_edge_weight(self, u, v, edge_data):
-    base_time = edge_data.get("travel_time", 9999)
-
-    # Kurangi bobot untuk jalan utama (lebih disukai)
-    highway = edge_data.get("highway", "")
-    if highway in ("primary", "trunk"):
-        base_time *= 0.85    # 15% lebih ringan
-
-    return base_time
-```
-
----
-
-### Contoh nyata: model ML sudah di-train di luar
-
-```python
-import joblib   # untuk load model sklearn
-
-class TeamAModel(BaseRoutingAlgorithm):
-    name = "team_a"
-    description = "Model Tim A — Random Forest"
-
-    def __init__(self):
-        # Load model yang sudah di-train
-        self.model = joblib.load("models/team_a_model.pkl")
-
-    def predict_edge_weight(self, u, v, edge_data):
-        fitur = [[
-            edge_data.get("length", 0),
-            edge_data.get("travel_time", 0),
-            edge_data.get("speed_kph", 30),
-        ]]
-        return float(self.model.predict(fitur)[0])
-```
+Node ID diambil dari `data/facilities_with_network.csv`.  
+Semua tim diuji pada skenario yang **sama persis** — tidak ada yang random.
 
 ---
 

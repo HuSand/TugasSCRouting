@@ -175,7 +175,8 @@ def build_scenarios(G: nx.MultiDiGraph,
 def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime,
-        TeamAModel, TeamBModel,
+        TeamAGA, TeamBGA,
+        EXAMPLE_SCENARIOS,
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -208,17 +209,20 @@ def run_platform(cfg):
     # ── Register algorithms ──────────────────────────────────
     # Add or remove algorithms here.
     registry = AlgorithmRegistry()
-    registry.register(DijkstraTime())       # baseline: fastest route
-    registry.register(DijkstraDistance())   # baseline: shortest route
-    registry.register(AStarTime())          # baseline: A* fastest
-    registry.register(TeamAModel())         # Team A's model
-    registry.register(TeamBModel())         # Team B's model
-    # registry.register(YourNewAlgorithm()) # add more here
+    registry.register(DijkstraTime())       # baseline: rute tercepat
+    registry.register(DijkstraDistance())   # baseline: rute terpendek
+    registry.register(AStarTime())          # baseline: A* tercepat
+    registry.register(TeamAGA())            # Team A — GA (tuning di algorithms.py)
+    registry.register(TeamBGA())            # Team B — GA (tuning di algorithms.py)
+    # registry.register(YourNewAlgorithm()) # tambah algoritma lain di sini
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────
+    # Gunakan skenario konkret dari EXAMPLE_SCENARIOS (fasilitas Surabaya nyata).
+    # Kalau mau pakai auto-generate, ganti baris di bawah dengan:
+    #   scenarios = build_scenarios(G, fac, n=cfg.N_SCENARIOS)
     log.info("\nBuilding benchmark scenarios...")
-    scenarios = build_scenarios(G, fac, n=cfg.N_SCENARIOS)
+    scenarios = EXAMPLE_SCENARIOS[:cfg.N_SCENARIOS]
     if not scenarios:
         log.error("Could not build scenarios — check that extraction ran successfully.")
         return

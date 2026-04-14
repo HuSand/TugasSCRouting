@@ -1,0 +1,38 @@
+Surabaya Public Facility Extraction Report
+Generated: 2026-04-13T14:56:15.701180
+==================================================
+
+FACILITIES
+  Total: 4081
+  education: 1699
+  community: 1145
+  government: 698
+  healthcare: 436
+  emergency: 73
+  transport: 30
+
+ROAD NETWORK
+  Nodes: 36681
+  Edges: 89215
+  Avg speed: 29.3 km/h
+
+SNAP QUALITY
+  Mean snap distance: 50.0m
+  Facilities >500m from road: 6
+
+ATTRIBUTE COMPLETENESS
+  name: 99.7%
+  addr:street: 9.1%
+  phone: 2.5%
+  opening_hours: 1.7%
+
+OUTPUT FILES
+  extraction_report.txt: 0.0 KB
+  facilities_clean.csv: 584.7 KB
+  facilities_clean.geojson: 1.96 MB
+  facilities_raw.geojson: 15.96 MB
+  facilities_with_network.csv: 701.6 KB
+  facilities_with_network.geojson: 2.22 MB
+  road_network.graphml: 50.28 MB
+  road_network_edges.geojson: 49.79 MB
+  road_network_nodes.geojson: 8.38 MB

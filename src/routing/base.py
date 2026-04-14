@@ -122,6 +122,7 @@ class Scenario:
     route_labels:  Optional[List[str]] = None
     route_coords:  Optional[List[tuple]] = None
     optimize_order: bool = False
+    round_trip:     bool = False   # if True, add a return leg back to source after all stops
 
     @property
     def node_sequence(self) -> List[int]:

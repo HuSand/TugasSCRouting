@@ -71,6 +71,7 @@ def build_evolution_viewer(
                 for label, coords in zip(s.label_sequence, s.coord_sequence)
             ],
             "optimize_order": s.optimize_order,
+            "round_trip":     s.round_trip,
         }
         for s in scenarios
     }
@@ -209,10 +210,11 @@ select:focus{border-color:#e63946}
   <div class="speed-ctrl">
     <label>Speed</label>
     <select id="speed-select">
-      <option value="600">Slow</option>
-      <option value="300" selected>Normal</option>
-      <option value="120">Fast</option>
-      <option value="40">Turbo</option>
+      <option value="2500">Very Slow</option>
+      <option value="1500" selected>Slow</option>
+      <option value="700">Normal</option>
+      <option value="220">Fast</option>
+      <option value="50">Turbo</option>
     </select>
   </div>
   <div class="speed-ctrl">
@@ -284,7 +286,8 @@ ALL_ALGO_NAMES.forEach(a=>{
   algoSel.appendChild(o);
 });
 Object.keys(DATA.scenarios).forEach(s=>{
-  const o=document.createElement('option'); o.value=s; o.textContent=s;
+  const o=document.createElement('option'); o.value=s;
+  o.textContent = DATA.scenarios[s].round_trip ? s+' ↩' : s;
   scenSel.appendChild(o);
 });
 
@@ -359,7 +362,7 @@ function renderGARoute(algoName, genIdx, weight, opacity){
   gaLayers[algoName]=gaPl;
   // animate line draw — duration scales with playback speed so fast/turbo still feel snappy
   const speedMs=parseInt(speedSel.value,10);
-  animatePath(gaPl, Math.min(Math.round(speedMs*0.75), 650));
+  animatePath(gaPl, Math.round(speedMs*0.80));
 }
 
 // ── Render static baseline route ─────────────────────────────
@@ -511,13 +514,22 @@ function resetScene(){
       {label:sc.target_label,coords:sc.target}
     ];
     stops.forEach((stop,idx)=>{
+      const isStart = idx===0;
+      const pinColor = isStart ? '#e63946' : '#4b5563';
       const marker=L.marker(stop.coords,{
-        icon:stopIcon(String(idx+1),'#4b5563'),
+        icon:stopIcon(String(idx+1), pinColor),
         zIndexOffset:1000
-      }).addTo(map).bindTooltip(`${idx+1}. ${stop.label}`);
-      marker.bindPopup(`<b>Destination ${idx+1}</b><br>${stop.label}`);
+      }).addTo(map).bindTooltip(`${idx+1}. ${stop.label}${isStart&&sc.round_trip?' (Start / Return)':''}`);
+      marker.bindPopup(`<b>Destination ${idx+1}${isStart&&sc.round_trip?' — Start &amp; Return':''}</b><br>${stop.label}`);
       stopMarkers.push(marker);
     });
+    // For round-trip: show a faint dashed line hinting the return leg direction
+    if(sc.round_trip && stops.length>=2){
+      const returnHint=L.polyline([stops[stops.length-1].coords, stops[0].coords],{
+        color:'#e63946',weight:2,opacity:.35,dashArray:'6 8',interactive:false
+      }).addTo(map);
+      stopMarkers.push(returnHint);
+    }
     try{
       map.fitBounds(stops.map(s=>s.coords),{padding:[30,30]});
     }catch(e){
@@ -525,8 +537,13 @@ function resetScene(){
     }
   }
 
-  // Draw static baselines (always visible)
-  Object.keys(DATA.baselines).forEach(b=>renderBaseline(b));
+  // Draw baselines: all when in "All" mode, only the selected one when a baseline is picked,
+  // nothing when a single GA/SA algo is selected (keeps the view uncluttered).
+  if(isAll){
+    Object.keys(DATA.baselines).forEach(b=>renderBaseline(b));
+  } else if(!isGAAlgo(algo)){
+    renderBaseline(algo);
+  }
 
   const maxG = isAll ? maxGenAll() : (getHistory(algo).length||1);
   slider.min=1; slider.max=maxG; slider.value=1;

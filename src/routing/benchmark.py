@@ -243,7 +243,7 @@ class BenchmarkRunner:
                     target_node=scenario.target_node,
                 )
 
-        if len(nodes) <= 2:
+        if len(nodes) <= 2 and not scenario.round_trip:
             return algo.safe_run(G, scenario.source_node,
                                  scenario.target_node, scenario.name)
 
@@ -294,9 +294,28 @@ class BenchmarkRunner:
             else:
                 full_route.extend(result.route[1:])
 
+        # ── Return leg (round trip) ──────────────────────────────
+        if scenario.round_trip and full_route:
+            ret_name = f"{scenario.name}_return"
+            ret = algo.safe_run(G, nodes[-1], nodes[0], ret_name)
+            leg_results.append(ret)
+            leg_rows.append({
+                "leg": len(nodes),
+                "from": labels[-1] if labels else str(nodes[-1]),
+                "to":   labels[0]  if labels else str(nodes[0]),
+                "found": ret.found,
+                "travel_time_s":  ret.total_time_s    if ret.found else None,
+                "distance_m":     ret.total_distance_m if ret.found else None,
+                "computation_ms": ret.computation_ms,
+                "error":          ret.error,
+            })
+            if ret.found:
+                full_route.extend(ret.route[1:])
+
         elapsed = (time.perf_counter() - t0) * 1000
         metadata = {
             "multi_stop": True,
+            "round_trip": scenario.round_trip,
             "stop_count": len(nodes),
             "stops": labels,
             "visit_order_nodes": nodes,

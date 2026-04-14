@@ -1130,7 +1130,9 @@ _SCENARIO_POINTS = {
 }
 
 
-def _multi_stop_scenario(name: str, description: str, point_keys: list) -> Scenario:
+def _multi_stop_scenario(
+    name: str, description: str, point_keys: list, round_trip: bool = False
+) -> Scenario:
     points = [_SCENARIO_POINTS[k] for k in point_keys]
     nodes = [p["node"] for p in points]
     labels = [p["label"] for p in points]
@@ -1148,33 +1150,41 @@ def _multi_stop_scenario(name: str, description: str, point_keys: list) -> Scena
         route_labels=labels,
         route_coords=coords,
         optimize_order=True,
+        round_trip=round_trip,
     )
 
 
 EXAMPLE_SCENARIOS = [
+    # ── 5-stop (baseline complexity) ─────────────────────────────
     _multi_stop_scenario(
         "emergency_west_to_east_5",
-        "5-stop emergency route from west Surabaya toward east Surabaya hospitals",
+        "5-stop: emergency corridor from far-west Surabaya to eastern hospitals",
         ["polsek_benowo", "ciputra", "national", "rs_darmo", "rs_onkologi"],
     ),
     _multi_stop_scenario(
         "hospital_transfer_chain_5",
-        "5-stop hospital transfer chain across west, central, south, and east Surabaya",
+        "5-stop: hospital transfer chain west → central → south → east Surabaya",
         ["ciputra", "national", "rs_darmo", "rs_ramelan", "rsu_haji"],
     ),
     _multi_stop_scenario(
         "police_healthcare_patrol_5",
-        "5-stop police and healthcare patrol from city center to eastern Surabaya",
+        "5-stop: police + healthcare patrol, city center to east, returns to base",
         ["polsek_genteng", "rs_darmo", "rs_ramelan", "polsek_rungkut", "rs_onkologi"],
+        round_trip=True,
     ),
+    # ── 7-stop (complicated) ──────────────────────────────────────
     _multi_stop_scenario(
-        "west_central_east_response_5",
-        "5-stop response route crossing west, center, and east Surabaya",
-        ["national", "polsek_genteng", "rs_darmo", "rsu_haji", "rs_onkologi"],
+        "cross_city_zigzag_7",
+        "7-stop: full cross-city zigzag — far-west to far-east via north, center, and south",
+        ["polsek_benowo", "national", "polsek_genteng", "rs_darmo",
+         "rs_ramelan", "rsu_haji", "rs_onkologi"],
     ),
+    # ── 9-stop round trip (very complicated) ─────────────────────
     _multi_stop_scenario(
-        "south_east_emergency_chain_5",
-        "5-stop emergency route through south and east Surabaya facilities",
-        ["rs_ramelan", "rs_darmo", "polsek_genteng", "rsu_haji", "polsek_rungkut"],
+        "full_city_patrol_9",
+        "9-stop: all-facilities full-city patrol with return to base — hardest scenario",
+        ["polsek_benowo", "ciputra", "national", "polsek_genteng",
+         "rs_darmo", "rs_ramelan", "polsek_rungkut", "rs_onkologi", "rsu_haji"],
+        round_trip=True,
     ),
 ]

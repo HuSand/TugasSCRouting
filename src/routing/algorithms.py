@@ -89,8 +89,7 @@ class DijkstraDistance(BaseRoutingAlgorithm):
 
 # ──────────────────────────────────────────────────────────────
 # Built-in Baselines
-# (do not remove — used as main lines in comparisons)
-# used as cmain omparison algorithm for this project(GA Algorithm)
+# (do not remove — used as lines in comparisons)
 # ──────────────────────────────────────────────────────────────
 class AStarTime(BaseRoutingAlgorithm):
     """
@@ -135,6 +134,24 @@ class AStarTime(BaseRoutingAlgorithm):
 # Dipakai oleh semua GA (Sandy, Burhan, Bimo, Gerald).
 # Jangan diubah — kalau mau custom, override di class masing-masing.
 # ──────────────────────────────────────────────────────────────
+
+def _route_streets(G, path: list) -> list:
+    """Deduplicated street names for a path (same logic as visualize.py)."""
+    streets, prev = [], None
+    for u, v in zip(path[:-1], path[1:]):
+        data = G.get_edge_data(u, v)
+        if not data:
+            continue
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        name = best.get("name") or best.get("highway") or "unnamed"
+        if isinstance(name, list):
+            name = name[0]
+        name = str(name).strip()
+        if name and name != prev:
+            streets.append(name)
+            prev = name
+    return streets
+
 
 def _ga_path_cost(G, path: list) -> float:
     """Total travel_time sepanjang path (lower = better)."""
@@ -247,10 +264,26 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
                                  source_node, target_node, route, ms)
 
     # 2. Evolusi
-    for _ in range(algo.GENERATIONS):
-        fitness  = [_ga_path_cost(G, p) for p in population]
+    gen_history = []
+    for gen_idx in range(algo.GENERATIONS):
+        # Gunakan _fitness() milik masing-masing algo — ini yang membedakan tiap orang
+        fitness  = [algo._fitness(G, p) for p in population]
         best_idx = min(range(len(population)), key=lambda i: fitness[i])
         elite    = population[best_idx]
+
+        # Rekam koordinat + nama jalan rute terbaik generasi ini
+        coords = []
+        for n in elite:
+            node = G.nodes.get(n)
+            if node:
+                coords.append([round(float(node["y"]), 5),
+                                round(float(node["x"]), 5)])
+        gen_history.append({
+            "gen":     gen_idx + 1,
+            "min":     round(_ga_path_cost(G, elite) / 60, 3),  # selalu tampilkan travel_time asli
+            "coords":  coords,
+            "streets": _route_streets(G, elite),
+        })
 
         new_pop = [elite]
         while len(new_pop) < algo.POPULATION_SIZE:
@@ -265,8 +298,8 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
             new_pop.append(child)
         population = new_pop
 
-    # 3. Return terbaik
-    fitness = [_ga_path_cost(G, p) for p in population]
+    # 3. Return terbaik (pakai _fitness untuk konsistensi)
+    fitness = [algo._fitness(G, p) for p in population]
     best    = population[min(range(len(population)), key=lambda i: fitness[i])]
     ms      = (time.perf_counter() - t0) * 1000
     return RouteResult.build(
@@ -276,41 +309,61 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
             "population":     algo.POPULATION_SIZE,
             "crossover_rate": algo.CROSSOVER_RATE,
             "mutation_rate":  algo.MUTATION_RATE,
+            "gen_history":    gen_history,
         },
     )
 
 
 # ──────────────────────────────────────────────────────────────
 # SANDY
+# Fitness: balanced waktu + jarak (50/50)
+# → cenderung pilih rute lebih pendek meski sedikit lebih lambat
 # ──────────────────────────────────────────────────────────────
 
 class SandyGA(BaseRoutingAlgorithm):
     """
-    Sandy — GA dengan seleksi ketat + mutasi moderat.
+    Sandy — GA dengan fitness balanced time+distance.
 
     Strategi:
-    - Populasi besar (50) supaya eksplorasi awal luas.
-    - Tournament size 5 → tekanan seleksi tinggi, konvergen lebih cepat.
-    - Crossover rate tinggi (0.85) → banyak kombinasi path baru.
-    - Mutasi (0.2) moderat supaya tidak terlalu acak.
-    - Custom crossover: pilih titik pivot terdekat ke tengah path
-      supaya segmen yang digabung lebih seimbang.
+    - Fitness = 50% travel_time + 50% physical_distance (dinormalisasi).
+      Efeknya: GA memilih rute yang tidak terlalu memutar meski sedikit
+      lebih lambat dari rute tercepat murni. Berbeda dari Dijkstra time.
+    - Populasi besar (50) + tournament ketat (5) → konvergen cepat.
+    - Custom crossover: pivot di tengah path → segmen lebih seimbang.
     """
     name        = "sandy_ga"
-    description = "Sandy — GA (pop=50, gen=60, tour=5)"
+    description = "Sandy — GA balanced time+distance (50/50)"
 
     # ── TUNING ZONE Sandy ─────────────────────────────────────
-    POPULATION_SIZE = 50
-    GENERATIONS     = 60
+    POPULATION_SIZE = 100
+    GENERATIONS     = 100
     CROSSOVER_RATE  = 0.85
-    MUTATION_RATE   = 0.2
+    MUTATION_RATE   = 0.6
     TOURNAMENT_SIZE = 5
     RANDOM_SEED     = 42
     # ─────────────────────────────────────────────────────────
 
+    def _fitness(self, G, path: list) -> float:
+        """
+        Balanced fitness: 50% waktu perjalanan + 50% jarak fisik.
+        Jarak dinormalisasi ke satuan detik pakai kecepatan referensi 40 km/h.
+        Rute yang lebih pendek (walau sedikit lebih lambat) tetap diunggulkan.
+        """
+        REF_SPEED_MS = 40 / 3.6   # 40 km/h dalam m/s
+        time_s = 0.0
+        dist_m = 0.0
+        for u, v in zip(path[:-1], path[1:]):
+            data = G.get_edge_data(u, v)
+            if data is None:
+                return float("inf")
+            best    = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+            time_s += float(best.get("travel_time", 9999))
+            dist_m += float(best.get("length", 0))
+        dist_as_time = dist_m / REF_SPEED_MS   # konversi jarak → "waktu ekuivalen"
+        return 0.5 * time_s + 0.5 * dist_as_time
+
     def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        # Pilih pivot = node bersama paling dekat ke tengah p1.
-        # Kalau ada beberapa yang sama jaraknya, pilih acak pakai rng.
+        # Pivot = node bersama paling dekat ke tengah p1.
         set1   = set(p1[1:-1])
         common = [n for n in p2[1:-1] if n in set1]
         if not common:
@@ -324,25 +377,25 @@ class SandyGA(BaseRoutingAlgorithm):
         return p1[:i1] + p2[i2:]
 
     def _mutate(self, G, path: list, rng: random.Random) -> list:
-        return _ga_mutate(G, path, rng)   # pakai default
+        return _ga_mutate(G, path, rng)
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
 
 # ──────────────────────────────────────────────────────────────
-# BURHAN — TODO
+# BURHAN — TODO: isi bagian ini
 # ──────────────────────────────────────────────────────────────
 
 class BurhanGA(BaseRoutingAlgorithm):
     """
-    Burhan — isi TUNING ZONE dan strategi kamu di sini.
+    Burhan — tulis strategimu di sini setelah kamu tentukan.
 
-    Cara:
-    1. Ubah angka di TUNING ZONE sesuai eksperimen kamu.
-    2. (Opsional) Override _crossover atau _mutate dengan
-       strategi yang berbeda dari Sandy.
-    3. Jalankan: python main.py compare
+    Yang WAJIB diubah:
+      1. Angka-angka di TUNING ZONE
+      2. Isi _fitness() dengan objective function milikmu
+
+    Lihat SandyGA di atas sebagai contoh _fitness() yang sudah jadi.
     """
     name        = "burhan_ga"
     description = "Burhan — GA (belum dituning)"
@@ -356,29 +409,47 @@ class BurhanGA(BaseRoutingAlgorithm):
     RANDOM_SEED     = 10
     # ─────────────────────────────────────────────────────────
 
+    def _fitness(self, G, path: list) -> float:
+        """
+        TODO: ganti dengan objective function milikmu.
+
+        Nilai return harus berupa float — semakin kecil = semakin baik.
+        Defaultnya minimasi travel_time (sama seperti Dijkstra).
+
+        Edge attributes yang bisa kamu pakai per edge (u, v):
+          best = min(G.get_edge_data(u,v).values(),
+                     key=lambda d: float(d.get("travel_time", 9999)))
+          best.get("travel_time")  # detik
+          best.get("length")       # meter
+          best.get("speed_kph")    # km/h
+          best.get("highway")      # tipe jalan: primary/secondary/residential/...
+          best.get("name")         # nama jalan
+        """
+        return _ga_path_cost(G, path)   # default — ganti dengan idemu
+
     def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        return _ga_crossover(p1, p2, rng)   # TODO: ganti dengan strategimu
+        return _ga_crossover(p1, p2, rng)   # TODO: boleh override
 
     def _mutate(self, G, path: list, rng: random.Random) -> list:
-        return _ga_mutate(G, path, rng)     # TODO: ganti dengan strategimu
+        return _ga_mutate(G, path, rng)     # TODO: boleh override
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
 
 # ──────────────────────────────────────────────────────────────
-# BIMO — TODO
+# BIMO — TODO: isi bagian ini
 # ──────────────────────────────────────────────────────────────
 
 class BimoGA(BaseRoutingAlgorithm):
     """
-    Bimo — isi TUNING ZONE dan strategi kamu di sini.
+    Bimo — tulis strategimu di sini setelah kamu tentukan.
 
-    Cara:
-    1. Ubah angka di TUNING ZONE sesuai eksperimen kamu.
-    2. (Opsional) Override _crossover atau _mutate dengan
-       strategi yang berbeda dari Sandy.
-    3. Jalankan: python main.py compare
+    Yang WAJIB diubah:
+      1. Angka-angka di TUNING ZONE
+      2. Isi _fitness() dengan objective function milikmu
+
+    Lihat SandyGA di atas sebagai contoh _fitness() yang sudah jadi.
     """
     name        = "bimo_ga"
     description = "Bimo — GA (belum dituning)"
@@ -392,29 +463,47 @@ class BimoGA(BaseRoutingAlgorithm):
     RANDOM_SEED     = 20
     # ─────────────────────────────────────────────────────────
 
+    def _fitness(self, G, path: list) -> float:
+        """
+        TODO: ganti dengan objective function milikmu.
+
+        Nilai return harus berupa float — semakin kecil = semakin baik.
+        Defaultnya minimasi travel_time (sama seperti Dijkstra).
+
+        Edge attributes yang bisa kamu pakai per edge (u, v):
+          best = min(G.get_edge_data(u,v).values(),
+                     key=lambda d: float(d.get("travel_time", 9999)))
+          best.get("travel_time")  # detik
+          best.get("length")       # meter
+          best.get("speed_kph")    # km/h
+          best.get("highway")      # tipe jalan: primary/secondary/residential/...
+          best.get("name")         # nama jalan
+        """
+        return _ga_path_cost(G, path)   # default — ganti dengan idemu
+
     def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        return _ga_crossover(p1, p2, rng)   # TODO: ganti dengan strategimu
+        return _ga_crossover(p1, p2, rng)   # TODO: boleh override
 
     def _mutate(self, G, path: list, rng: random.Random) -> list:
-        return _ga_mutate(G, path, rng)     # TODO: ganti dengan strategimu
+        return _ga_mutate(G, path, rng)     # TODO: boleh override
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
 
 # ──────────────────────────────────────────────────────────────
-# GERALD — TODO
+# GERALD — TODO: isi bagian ini
 # ──────────────────────────────────────────────────────────────
 
 class GeraldGA(BaseRoutingAlgorithm):
     """
-    Gerald — isi TUNING ZONE dan strategi kamu di sini.
+    Gerald — tulis strategimu di sini setelah kamu tentukan.
 
-    Cara:
-    1. Ubah angka di TUNING ZONE sesuai eksperimen kamu.
-    2. (Opsional) Override _crossover atau _mutate dengan
-       strategi yang berbeda dari Sandy.
-    3. Jalankan: python main.py compare
+    Yang WAJIB diubah:
+      1. Angka-angka di TUNING ZONE
+      2. Isi _fitness() dengan objective function milikmu
+
+    Lihat SandyGA di atas sebagai contoh _fitness() yang sudah jadi.
     """
     name        = "gerald_ga"
     description = "Gerald — GA (belum dituning)"
@@ -428,11 +517,29 @@ class GeraldGA(BaseRoutingAlgorithm):
     RANDOM_SEED     = 30
     # ─────────────────────────────────────────────────────────
 
+    def _fitness(self, G, path: list) -> float:
+        """
+        TODO: ganti dengan objective function milikmu.
+
+        Nilai return harus berupa float — semakin kecil = semakin baik.
+        Defaultnya minimasi travel_time (sama seperti Dijkstra).
+
+        Edge attributes yang bisa kamu pakai per edge (u, v):
+          best = min(G.get_edge_data(u,v).values(),
+                     key=lambda d: float(d.get("travel_time", 9999)))
+          best.get("travel_time")  # detik
+          best.get("length")       # meter
+          best.get("speed_kph")    # km/h
+          best.get("highway")      # tipe jalan: primary/secondary/residential/...
+          best.get("name")         # nama jalan
+        """
+        return _ga_path_cost(G, path)   # default — ganti dengan idemu
+
     def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        return _ga_crossover(p1, p2, rng)   # TODO: ganti dengan strategimu
+        return _ga_crossover(p1, p2, rng)   # TODO: boleh override
 
     def _mutate(self, G, path: list, rng: random.Random) -> list:
-        return _ga_mutate(G, path, rng)     # TODO: ganti dengan strategimu
+        return _ga_mutate(G, path, rng)     # TODO: boleh override
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
@@ -518,6 +625,16 @@ EXAMPLE_SCENARIOS = [
         target_label="RSU Haji Surabaya",
         source_coords=(-7.2809, 112.6346),
         target_coords=(-7.2828, 112.7798),
+    ),
+    Scenario(
+        name="benowo_to_onkologi",
+        description="EXTREME lintas kota: Polsek Benowo (barat jauh) → RS Onkologi (timur) ~19km",
+        source_node=5539027568,
+        target_node=7059452149,
+        source_label="Polsek Benowo",
+        target_label="RS Onkologi",
+        source_coords=(-7.2359, 112.6076),
+        target_coords=(-7.2909, 112.7893),
     ),
 ]
 

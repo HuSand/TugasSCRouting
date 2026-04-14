@@ -3,6 +3,8 @@ Algorithm registry, benchmark runner, and scenario builder.
 """
 
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -14,6 +16,116 @@ import osmnx as ox
 from src.routing.base import BaseRoutingAlgorithm, RouteResult, Scenario
 
 log = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────
+# Evolution log writer
+# ──────────────────────────────────────────────────────────────
+
+def _write_evolution_log(result: RouteResult, log_dir: Path):
+    """
+    Tulis file teks per-generasi untuk satu GA result.
+    File: logs/evolution_<algo>_<scenario>.txt
+    Hanya dipanggil kalau result punya gen_history di metadata.
+    """
+    history = result.metadata.get("gen_history")
+    if not history:
+        return
+
+    log_dir.mkdir(exist_ok=True)
+    fname = log_dir / f"evolution_{result.algorithm_name}_{result.scenario_name}.txt"
+
+    first_min  = history[0]["min"]
+    final_min  = history[-1]["min"]
+    total_impr = (first_min - final_min) / first_min * 100 if first_min > 0 else 0.0
+
+    # Find gens where improvement happened
+    prev_best = first_min
+    improved_gens = []
+    for frame in history:
+        if frame["min"] < prev_best - 1e-6:
+            improved_gens.append(frame["gen"])
+            prev_best = frame["min"]
+
+    with open(fname, "w", encoding="utf-8") as f:
+        f.write(f"GA Evolution Log\n")
+        f.write(f"Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"{'='*60}\n")
+        f.write(f"Algorithm : {result.algorithm_name}\n")
+        f.write(f"Scenario  : {result.scenario_name}\n")
+        m = result.metadata
+        f.write(f"Config    : pop={m.get('population','?')}  "
+                f"gen={m.get('generations','?')}  "
+                f"xover={m.get('crossover_rate','?')}  "
+                f"mut={m.get('mutation_rate','?')}\n")
+        f.write(f"CPU time  : {result.computation_ms:.1f} ms\n")
+        f.write(f"{'='*60}\n\n")
+
+        prev      = first_min
+        prev_streets: list = []
+        for frame in history:
+            gen     = frame["gen"]
+            t       = frame["min"]
+            impr    = (first_min - t) / first_min * 100 if first_min > 0 else 0.0
+            delta   = prev - t
+            streets = frame.get("streets", [])
+
+            # ── status tag ──
+            if gen == 1:
+                tag = "initial"
+            elif delta > 1e-6:
+                tag = f"IMPROVED  -{delta:.3f} min"
+            else:
+                tag = ""
+            if gen == len(history):
+                tag = (tag + " [FINAL]").strip() if tag else "[FINAL]"
+
+            # ── route changed? ──
+            route_changed = streets != prev_streets
+
+            f.write(f"\n{'─'*60}\n")
+            f.write(f"Gen {gen:>3}  |  {t:.4f} min  |  {impr:.2f}% improved")
+            if tag:
+                f.write(f"  |  {tag}")
+            f.write("\n")
+
+            if streets:
+                if route_changed:
+                    route_str = " -> ".join(streets)
+                    # Wrap long route strings at 56 chars
+                    f.write(f"  Route : {route_str[:56]}\n")
+                    if len(route_str) > 56:
+                        # Continue remaining segments indented
+                        rest = route_str[56:]
+                        while rest:
+                            f.write(f"          {rest[:56]}\n")
+                            rest = rest[56:]
+                else:
+                    f.write(f"  Route : (unchanged)\n")
+            else:
+                f.write(f"  Route : -\n")
+
+            prev         = t
+            prev_streets = streets
+
+        # ── Summary ──
+        final_streets = history[-1].get("streets", [])
+        f.write(f"\n{'='*60}\n")
+        f.write(f"SUMMARY\n")
+        f.write(f"  Gen 1 best  : {first_min:.4f} min\n")
+        f.write(f"  Final best  : {final_min:.4f} min\n")
+        f.write(f"  Total impr  : {total_impr:.2f}%\n")
+        f.write(f"  # improved  : {len(improved_gens)} generations\n")
+        if improved_gens:
+            f.write(f"  Improved at : gen {', '.join(str(g) for g in improved_gens)}\n")
+        f.write(f"  Route nodes : {result.nodes_in_route}\n")
+        f.write(f"  Distance    : {result.total_distance_m/1000:.3f} km\n")
+        if final_streets:
+            f.write(f"\nFINAL ROUTE\n")
+            for i, s in enumerate(final_streets, 1):
+                f.write(f"  {i:>2}. {s}\n")
+
+    log.debug(f"    evolution log -> {fname.name}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -53,8 +165,9 @@ class AlgorithmRegistry:
 class BenchmarkRunner:
     """Runs every registered algorithm on every scenario."""
 
-    def __init__(self, registry: AlgorithmRegistry):
+    def __init__(self, registry: AlgorithmRegistry, log_dir: Path = None):
         self.registry = registry
+        self.log_dir  = log_dir
         self.scenarios: List[Scenario] = []
         self.results:   List[RouteResult] = []
 
@@ -83,6 +196,8 @@ class BenchmarkRunner:
                          f"dist={result.total_distance_m/1000:5.2f}km  "
                          f"cpu={result.computation_ms:6.1f}ms")
                 ResultVisualiser.log_route_streets(G, result)
+                if self.log_dir and "gen_history" in result.metadata:
+                    _write_evolution_log(result, self.log_dir)
 
         return self._to_dataframe()
 
@@ -235,7 +350,7 @@ def run_platform(cfg):
         log.info(f"  [{s.name}]  {s.source_label} -> {s.target_label}")
 
     # ── Run benchmark ────────────────────────────────────────
-    runner = BenchmarkRunner(registry)
+    runner = BenchmarkRunner(registry, log_dir=cfg.LOG_DIR)
     for s in scenarios:
         runner.add_scenario(s)
     df      = runner.run(G)
@@ -255,8 +370,14 @@ def run_platform(cfg):
         vis.map_scenario(G, scenario, scene_results)
     vis.chart_comparison(df)
 
+    # ── GA Evolution Viewer ──────────────────────────────────
+    from src.routing.evolve_viz import build_evolution_viewer
+    build_evolution_viewer(G, scenarios, runner.results, cfg.DATA_DIR)
+
     log.info("\nOutputs in data/:")
     log.info("  comparison_results.csv    raw results per algorithm/scenario")
     log.info("  comparison_summary.csv    aggregate stats per algorithm")
     log.info("  comparison_chart.png      travel time + speed bar charts")
     log.info("  comparison_map_*.html     route overlay maps (open in browser)")
+    log.info("  evolution_viewer.html     GA evolution timeline (open in browser)")
+    log.info("  (logs/)evolution_*.txt    per-generation log per GA algorithm")

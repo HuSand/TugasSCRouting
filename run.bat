@@ -66,16 +66,18 @@ echo   3   Routing demonstrations
 echo   4   Algorithm comparison benchmark
 echo   ---------------------------------------------------------
 echo   5   Run full pipeline  (1 -^> 2 -^> 3 -^> 4)
+echo   6   Open GA Evolution Viewer  (run 4 first)
 echo.
 echo   0   Exit
 echo.
-set /p "CHOICE= Select [0-5]: "
+set /p "CHOICE= Select [0-6]: "
 
 if "%CHOICE%"=="1" goto :DO1
 if "%CHOICE%"=="2" goto :DO2
 if "%CHOICE%"=="3" goto :DO3
 if "%CHOICE%"=="4" goto :DO4
 if "%CHOICE%"=="5" goto :DO5
+if "%CHOICE%"=="6" goto :DO6
 if "%CHOICE%"=="0" exit /b 0
 echo  Pilihan tidak valid.
 timeout /t 1 >nul
@@ -104,6 +106,18 @@ goto :BACK
 :DO5
 echo.
 "%PY%" main.py all
+goto :BACK
+
+:DO6
+echo.
+if exist "data\evolution_viewer.html" (
+    echo  Opening GA Evolution Viewer in browser...
+    start "" "data\evolution_viewer.html"
+) else (
+    echo  [INFO] evolution_viewer.html not found.
+    echo  Run option 4 ^(Algorithm comparison^) first to generate it.
+    pause
+)
 goto :BACK
 
 :BACK

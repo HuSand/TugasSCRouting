@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python -c ':*)",
+      "Bash(ls venv/)",
+      "Bash(conda run -n surabaya-routing python -c ':*)",
+      "Bash(conda run:*)"
+    ]
+  }
+}

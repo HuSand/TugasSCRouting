@@ -2,28 +2,54 @@
 setlocal enabledelayedexpansion
 
 REM =====================================================
-REM  Surabaya Routing Platform — Run Menu
+REM  Surabaya Routing Platform - Run Menu
 REM =====================================================
 
-REM --- Detect environment ---
+set "ENV_NAME=surabaya-routing"
+
+REM --- 1. Cek venv dulu ---
 if exist "venv\Scripts\python.exe" (
     set "PY=venv\Scripts\python.exe"
-    set "ENV=venv"
+    set "ENV_LABEL=venv"
     goto :MENU
 )
-where conda >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    conda env list | findstr /C:"surabaya-routing" >nul 2>&1
-    if !ERRORLEVEL! equ 0 (
-        set "PY=conda run --no-capture-output -n surabaya-routing python"
-        set "ENV=conda: surabaya-routing"
+
+REM --- 2. Cari python.exe langsung di conda env dirs ---
+for %%d in (
+    "%USERPROFILE%\anaconda3\envs\%ENV_NAME%"
+    "%USERPROFILE%\Anaconda3\envs\%ENV_NAME%"
+    "%USERPROFILE%\miniconda3\envs\%ENV_NAME%"
+    "%USERPROFILE%\Miniconda3\envs\%ENV_NAME%"
+    "%USERPROFILE%\.conda\envs\%ENV_NAME%"
+    "%LOCALAPPDATA%\conda\conda\envs\%ENV_NAME%"
+    "C:\ProgramData\anaconda3\envs\%ENV_NAME%"
+    "C:\ProgramData\miniconda3\envs\%ENV_NAME%"
+) do (
+    if exist "%%~d\python.exe" (
+        set "PY=%%~d\python.exe"
+        set "ENV_LABEL=conda: %ENV_NAME%"
         goto :MENU
     )
 )
+
+REM --- 3. Fallback: tanya conda langsung ---
+where conda >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    for /f "tokens=*" %%p in ('conda run -n %ENV_NAME% python -c "import sys;print(sys.executable)" 2^>nul') do (
+        if exist "%%p" (
+            set "PY=%%p"
+            set "ENV_LABEL=conda: %ENV_NAME%"
+            goto :MENU
+        )
+    )
+)
+
 echo.
-echo  [ERROR] No environment found. Run install.bat first.
+echo  [ERROR] Environment '%ENV_NAME%' tidak ditemukan.
+echo  Jalankan install.bat terlebih dahulu.
 echo.
-pause & exit /b 1
+pause
+exit /b 1
 
 
 :MENU
@@ -31,33 +57,54 @@ cls
 echo.
 echo  =========================================================
 echo   Surabaya Public Facility Routing Platform
-echo   Env: %ENV%
+echo   Env: %ENV_LABEL%
 echo  =========================================================
 echo.
 echo   1   Extract facilities + road network  (internet, ~10 min)
 echo   2   Explore and profile data
 echo   3   Routing demonstrations
 echo   4   Algorithm comparison benchmark
-echo   ─────────────────────────────────────────────────────
-echo   5   Run full pipeline  (1 → 2 → 3 → 4)
+echo   ---------------------------------------------------------
+echo   5   Run full pipeline  (1 -^> 2 -^> 3 -^> 4)
 echo.
 echo   0   Exit
 echo.
 set /p "CHOICE= Select [0-5]: "
 
-if "%CHOICE%"=="1" ( call :RUN extract   & goto :BACK )
-if "%CHOICE%"=="2" ( call :RUN explore   & goto :BACK )
-if "%CHOICE%"=="3" ( call :RUN demo      & goto :BACK )
-if "%CHOICE%"=="4" ( call :RUN compare   & goto :BACK )
-if "%CHOICE%"=="5" ( call :RUN all       & goto :BACK )
+if "%CHOICE%"=="1" goto :DO1
+if "%CHOICE%"=="2" goto :DO2
+if "%CHOICE%"=="3" goto :DO3
+if "%CHOICE%"=="4" goto :DO4
+if "%CHOICE%"=="5" goto :DO5
 if "%CHOICE%"=="0" exit /b 0
-echo  Invalid choice. & timeout /t 1 >nul & goto :MENU
+echo  Pilihan tidak valid.
+timeout /t 1 >nul
+goto :MENU
 
-
-:RUN
+:DO1
 echo.
-%PY% main.py %1
-exit /b %ERRORLEVEL%
+"%PY%" main.py extract
+goto :BACK
+
+:DO2
+echo.
+"%PY%" main.py explore
+goto :BACK
+
+:DO3
+echo.
+"%PY%" main.py demo
+goto :BACK
+
+:DO4
+echo.
+"%PY%" main.py compare
+goto :BACK
+
+:DO5
+echo.
+"%PY%" main.py all
+goto :BACK
 
 :BACK
 echo.

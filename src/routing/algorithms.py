@@ -382,6 +382,169 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
 
 
 # ──────────────────────────────────────────────────────────────
+# CHRISTOFIDES ALGORITHM
+# Approximation algorithm untuk TSP pada metric space (complete graph).
+# Dipakai untuk skenario multi-stop; point-to-point tetap aman lewat fallback.
+# ──────────────────────────────────────────────────────────────
+
+def _build_metric_closure(G: nx.MultiDiGraph, nodes: list, weight: str = "travel_time") -> tuple:
+    """
+    Build complete graph dengan edge weights = shortest path antar node.
+    Return (metric_closure, pair_paths) supaya hasil TSP bisa di-expand
+    kembali ke road network asli.
+    """
+    source_graph = G.to_undirected()
+    closure = nx.Graph()
+    closure.add_nodes_from(nodes)
+    pair_paths = {}
+    
+    for i, src in enumerate(nodes):
+        for dst in nodes[i+1:]:
+            try:
+                path = nx.shortest_path(source_graph, src, dst, weight=weight)
+                path_len = nx.shortest_path_length(source_graph, src, dst, weight=weight)
+                closure.add_edge(src, dst, weight=float(path_len))
+                pair_paths[(src, dst)] = path
+                pair_paths[(dst, src)] = list(reversed(path))
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                # Jika tidak ada, gunakan infinity (tidak akan dipilih)
+                closure.add_edge(src, dst, weight=float("inf"))
+    
+    return closure, pair_paths
+
+
+def _christofides_tour(closure: nx.Graph, start_node=None) -> list:
+    """
+    Christofides algorithm untuk metric TSP.
+
+    Output berupa urutan node kunjungan. Kalau start_node diberikan,
+    hasil akan diputar agar dimulai dari node tersebut.
+    
+    Catatan: NetworkX menjalankan Christofides di graph lengkap berbobot.
+    """
+    tour = nx.approximation.traveling_salesman_problem(
+        closure,
+        weight="weight",
+        cycle=False,
+        method=nx.approximation.christofides,
+    )
+    if tour and tour[0] == tour[-1]:
+        tour = tour[:-1]
+    if start_node in tour:
+        idx = tour.index(start_node)
+        tour = tour[idx:] + tour[:idx]
+    return tour
+
+
+def _expand_tsp_tour_to_road_path(G: nx.MultiDiGraph, tsp_tour: list, weight: str = "travel_time") -> list:
+    """
+    Expand urutan kunjungan TSP menjadi path nyata di road network.
+    Setiap pasangan node dalam tour dihubungkan dengan shortest path di G.
+    
+    Returns: full path (list of node IDs) dari tsp_tour[0] → ... → tsp_tour[-1].
+    """
+    if len(tsp_tour) < 2:
+        return tsp_tour
+    
+    full_path = []
+    for src, dst in zip(tsp_tour[:-1], tsp_tour[1:]):
+        leg = nx.shortest_path(G, src, dst, weight=weight)
+        if not full_path:
+            full_path.extend(leg)
+        else:
+            full_path.extend(leg[1:])
+    
+    return full_path if full_path else tsp_tour
+
+
+class ChristofidesAlgorithm(BaseRoutingAlgorithm):
+    """
+    Christofides approximation untuk multi-stop routing.
+
+    Manual singkat:
+    - Dipakai untuk skenario dengan 3+ waypoint.
+    - Input node diambil dari scenario.route_nodes / node_sequence.
+    - Urutan stop dihitung dari metric closure + Christofides.
+    - Urutan itu lalu di-expand kembali ke road network asli.
+    - Untuk point-to-point biasa tetap aman memakai shortest path.
+    """
+    name        = "christofides"
+    description = "Christofides — multi-stop TSP approximation"
+
+    def _route_multi_stop(self, G, nodes: list, scenario_name="", source_node=None, target_node=None):
+        t0 = time.perf_counter()
+        nodes = list(dict.fromkeys(nodes))
+        if len(nodes) < 3:
+            if source_node is None:
+                source_node = nodes[0] if nodes else None
+            if target_node is None:
+                target_node = nodes[-1] if nodes else None
+            if source_node is None or target_node is None:
+                ms = (time.perf_counter() - t0) * 1000
+                return RouteResult.failure(self.name, scenario_name, -1, -1, "Not enough nodes for routing", ms)
+            try:
+                route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
+            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+                ms = (time.perf_counter() - t0) * 1000
+                return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms, {
+                "algorithm_variant": "point_to_point_fallback",
+                "reason": "fewer_than_three_waypoints",
+            })
+
+        closure, pair_paths = _build_metric_closure(G, nodes, weight="travel_time")
+        tour = _christofides_tour(closure, start_node=source_node or nodes[0])
+        if len(tour) < 2:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(self.name, scenario_name, source_node or nodes[0], target_node or nodes[-1], "Christofides returned an empty tour", ms)
+
+        try:
+            route = _expand_tsp_tour_to_road_path(G, tour, weight="travel_time")
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(self.name, scenario_name, source_node or nodes[0], target_node or nodes[-1], str(e), ms)
+
+        ms = (time.perf_counter() - t0) * 1000
+        metadata = {
+            "algorithm_variant": "christofides_tsp",
+            "multi_stop": True,
+            "stop_count": len(nodes),
+            "stops": nodes,
+            "tour_nodes": tour,
+            "metric_closure_nodes": len(closure.nodes()),
+            "expanded_path_nodes": len(route),
+            "valid_solution": bool(route),
+        }
+        return RouteResult.build(
+            G,
+            self.name,
+            scenario_name,
+            source_node if source_node is not None else nodes[0],
+            target_node if target_node is not None else nodes[-1],
+            route,
+            ms,
+            metadata,
+        )
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        t0 = time.perf_counter()
+        try:
+            route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(self.name, scenario_name,
+                                       source_node, target_node, str(e), ms)
+        ms = (time.perf_counter() - t0) * 1000
+        metadata = {
+            "algorithm_variant": "point_to_point_fallback",
+            "reason": "point_to_point_routing",
+        }
+        return RouteResult.build(G, self.name, scenario_name,
+                                 source_node, target_node, route, ms, metadata)
+
+
+# ──────────────────────────────────────────────────────────────
 # SANDY
 # Fitness: balanced waktu + jarak (50/50)
 # → cenderung pilih rute lebih pendek meski sedikit lebih lambat
@@ -522,11 +685,11 @@ class BimoGA(BaseRoutingAlgorithm):
     description = "Bimo — GA (belum dituning)"
 
     # ── TUNING ZONE Bimo -- UBAH ANGKA INI ───────────────────
-    POPULATION_SIZE = 30    # TODO: coba variasikan
-    GENERATIONS     = 50    # TODO: coba variasikan
-    CROSSOVER_RATE  = 0.8   # TODO: coba variasikan
-    MUTATION_RATE   = 0.3   # TODO: coba variasikan
-    TOURNAMENT_SIZE = 3     # TODO: coba variasikan
+    POPULATION_SIZE = 80    # lebih besar supaya eksplorasi rute lebih beragam
+    GENERATIONS     = 90    # iterasi lebih banyak untuk stabilisasi fitness
+    CROSSOVER_RATE  = 0.88  # tetap tinggi, tapi tidak agresif penuh
+    MUTATION_RATE   = 0.42  # cukup eksploratif untuk menghindari stagnasi
+    TOURNAMENT_SIZE = 4     # seleksi sedikit lebih ketat dari default
     RANDOM_SEED     = 20
     # ─────────────────────────────────────────────────────────
 

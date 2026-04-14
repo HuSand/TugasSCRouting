@@ -21,6 +21,7 @@ ALL_COLORS = {
     "burhan_ga":         "#2196F3",
     "bimo_ga":           "#4CAF50",
     "gerald_ga":         "#FF9800",
+  "christofides":      "#2ECC71",
     "dijkstra_time":     "#9C27B0",
     "dijkstra_distance": "#795548",
     "astar_time":        "#00BCD4",
@@ -241,7 +242,12 @@ const allOpt = document.createElement('option');
 allOpt.value = IS_ALL; allOpt.textContent = '— All Algorithms —';
 algoSel.appendChild(allOpt);
 
-Object.keys(DATA.algorithms).forEach(a=>{
+const ALL_ALGO_NAMES = Array.from(new Set([
+  ...Object.keys(DATA.algorithms||{}),
+  ...Object.keys(DATA.baselines||{})
+]));
+
+ALL_ALGO_NAMES.forEach(a=>{
   const o=document.createElement('option'); o.value=a; o.textContent=a;
   algoSel.appendChild(o);
 });
@@ -299,6 +305,10 @@ function maxGenAll(){
   return m;
 }
 
+function isGAAlgo(algoName){
+  return Object.prototype.hasOwnProperty.call(DATA.algorithms||{}, algoName);
+}
+
 // ── Render GA routes at generation idx ───────────────────────
 function renderGARoute(algoName, genIdx, weight, opacity){
   const hist=getHistory(algoName);
@@ -322,10 +332,19 @@ function renderBaseline(algoName){
   const b=(DATA.baselines[algoName]||{})[sc];
   if(!b||!b.coords||b.coords.length<2) return;
   if(baseLayers[algoName]) map.removeLayer(baseLayers[algoName]);
-  baseLayers[algoName]=L.polyline(b.coords,{
+  // Christofides baseline is intentionally solid to match GA-style line readability.
+  const isSolid = algoName==='christofides';
+  const baselineStyle = {
     color:col(algoName),weight:3,opacity:.65,dashArray:'8 5',
     interactive:true
-  }).bindTooltip(`${algoName} | ${b.min.toFixed(1)} min | ${b.dist.toFixed(2)} km (static)`).addTo(map);
+  };
+  if(isSolid){
+    delete baselineStyle.dashArray;
+    baselineStyle.opacity=.9;
+    baselineStyle.weight=4;
+  }
+  baseLayers[algoName]=L.polyline(b.coords,baselineStyle)
+    .bindTooltip(`${algoName} | ${b.min.toFixed(1)} min | ${b.dist.toFixed(2)} km (static)`).addTo(map);
 }
 
 // ── Update legend ─────────────────────────────────────────────
@@ -353,8 +372,9 @@ function updateLegend(genIdx){
     Object.keys(DATA.baselines).forEach(b=>{
       const data=(DATA.baselines[b]||{})[sc];
       if(!data) return;
+      const swatchClass = b==='christofides' ? 'leg-swatch' : 'leg-swatch leg-dashed';
       const row=document.createElement('div'); row.className='leg-row';
-      row.innerHTML=`<div class="leg-swatch leg-dashed" style="color:${col(b)}"></div>
+      row.innerHTML=`<div class="${swatchClass}" style="color:${col(b)};background:${b==='christofides' ? col(b) : ''}"></div>
         <span class="leg-name">${b}</span>
         <span class="leg-val">${data.min.toFixed(1)} min | ${data.dist.toFixed(2)} km</span>`;
       legRows.appendChild(row);
@@ -402,23 +422,35 @@ function renderGen(genIdx){
 
   } else {
     // Single algorithm mode
-    renderGARoute(algo,genIdx,5,.92);
-    const hist=getHistory(algo);
-    if(!hist.length) return;
-    const frame=hist[Math.min(genIdx,hist.length-1)];
-    const first=hist[0].min;
-    const best=Math.min(...hist.slice(0,genIdx+1).map(h=>h.min));
-    const impr=first>0?((first-frame.min)/first*100).toFixed(1):'0.0';
     const refData=(DATA.baselines['dijkstra_time']||{})[sc];
+    if(isGAAlgo(algo)){
+      renderGARoute(algo,genIdx,5,.92);
+      const hist=getHistory(algo);
+      if(!hist.length) return;
+      const frame=hist[Math.min(genIdx,hist.length-1)];
+      const first=hist[0].min;
+      const impr=first>0?((first-frame.min)/first*100).toFixed(1):'0.0';
 
-    document.getElementById('s-gen').textContent  = frame.gen;
-    document.getElementById('s-time').textContent = frame.min.toFixed(1);
-    document.getElementById('s-dist').textContent = frame.dist!==undefined?Number(frame.dist).toFixed(2):'-';
-    document.getElementById('s-impr').textContent = impr+'%';
-    document.getElementById('s-ref').textContent  = refData?refData.min.toFixed(1):'—';
-    document.getElementById('s-total').textContent= hist.length;
-    genLabel.textContent=`Gen ${frame.gen} / ${hist.length}`;
-    progress.style.width=((frame.gen/hist.length)*100)+'%';
+      document.getElementById('s-gen').textContent  = frame.gen;
+      document.getElementById('s-time').textContent = frame.min.toFixed(1);
+      document.getElementById('s-dist').textContent = frame.dist!==undefined?Number(frame.dist).toFixed(2):'-';
+      document.getElementById('s-impr').textContent = impr+'%';
+      document.getElementById('s-ref').textContent  = refData?refData.min.toFixed(1):'—';
+      document.getElementById('s-total').textContent= hist.length;
+      genLabel.textContent=`Gen ${frame.gen} / ${hist.length}`;
+      progress.style.width=((frame.gen/hist.length)*100)+'%';
+    } else {
+      renderBaseline(algo);
+      const b=(DATA.baselines[algo]||{})[sc];
+      document.getElementById('s-gen').textContent  = '1';
+      document.getElementById('s-time').textContent = b?b.min.toFixed(1):'—';
+      document.getElementById('s-dist').textContent = b?Number(b.dist).toFixed(2):'-';
+      document.getElementById('s-impr').textContent = '0.0%';
+      document.getElementById('s-ref').textContent  = refData?refData.min.toFixed(1):'—';
+      document.getElementById('s-total').textContent= '1';
+      genLabel.textContent='Gen 1 / 1';
+      progress.style.width='100%';
+    }
   }
 
   updateLegend(genIdx);

@@ -628,34 +628,78 @@ class BurhanGA(BaseRoutingAlgorithm):
     Lihat SandyGA di atas sebagai contoh _fitness() yang sudah jadi.
     """
     name        = "burhan_ga"
-    description = "Burhan — GA (belum dituning)"
+    description = "Burhan — GA optimized (time + road quality + simplicity)"
 
     # ── TUNING ZONE Burhan -- UBAH ANGKA INI ─────────────────
-    POPULATION_SIZE = 30    # TODO: coba variasikan
-    GENERATIONS     = 50    # TODO: coba variasikan
-    CROSSOVER_RATE  = 0.8   # TODO: coba variasikan
-    MUTATION_RATE   = 0.3   # TODO: coba variasikan
-    TOURNAMENT_SIZE = 3     # TODO: coba variasikan
-    RANDOM_SEED     = 10
+    POPULATION_SIZE = 80    # TODO: coba variasikan
+    GENERATIONS     = 120    # TODO: coba variasikan
+    CROSSOVER_RATE  = 0.9   # TODO: coba variasikan
+    MUTATION_RATE   = 0.4   # TODO: coba variasikan
+    TOURNAMENT_SIZE = 5     # TODO: coba variasikan
+    RANDOM_SEED     = 99
     # ─────────────────────────────────────────────────────────
 
     def _fitness(self, G, path: list) -> float:
         """
-        TODO: ganti dengan objective function milikmu.
-
-        Nilai return harus berupa float — semakin kecil = semakin baik.
-        Defaultnya minimasi travel_time (sama seperti Dijkstra).
-
-        Edge attributes yang bisa kamu pakai per edge (u, v):
-          best = min(G.get_edge_data(u,v).values(),
-                     key=lambda d: float(d.get("travel_time", 9999)))
-          best.get("travel_time")  # detik
-          best.get("length")       # meter
-          best.get("speed_kph")    # km/h
-          best.get("highway")      # tipe jalan: primary/secondary/residential/...
-          best.get("name")         # nama jalan
+        Smart fitness:
+        - Minimasi waktu (utama)
+        - Penalti rute terlalu kompleks (banyak edge)
+        - Reward jalan cepat (speed tinggi)
         """
-        return _ga_path_cost(G, path)   # default — ganti dengan idemu
+
+        total_time = 0.0
+        total_length = 0.0
+        total_speed = 0.0
+        edges_count = 0
+
+        for u, v in zip(path[:-1], path[1:]):
+            data = G.get_edge_data(u, v)
+            if data is None:
+                return float("inf")
+
+            best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+
+            tt = float(best.get("travel_time", 9999))
+            length = float(best.get("length", 0))
+            speed = float(best.get("speed_kph", 30))  # fallback 30
+
+            total_time += tt
+            total_length += length
+            total_speed += speed
+            edges_count += 1
+
+        if edges_count == 0:
+            return float("inf")
+
+        avg_speed = total_speed / edges_count
+
+        # ── FITNESS FORMULA ─────────────────────────────
+        # 1. waktu = prioritas utama
+        # 2. penalti kompleksitas (banyak belokan)
+        # 3. reward jalan cepat
+
+        complexity_penalty = edges_count * 2.0
+        speed_reward = avg_speed * 5.0
+
+        return total_time + complexity_penalty - speed_reward
+
+    # def _fitness(self, G, path: list) -> float:
+    #     """
+    #   TODO: ganti dengan objective function milikmu.
+
+    #     Nilai return harus berupa float — semakin kecil = semakin baik.
+    #     Defaultnya minimasi travel_time (sama seperti Dijkstra).
+
+    #     Edge attributes yang bisa kamu pakai per edge (u, v):
+    #       best = min(G.get_edge_data(u,v).values(),
+    #                  key=lambda d: float(d.get("travel_time", 9999)))
+    #       best.get("travel_time")  # detik
+    #       best.get("length")       # meter
+    #       best.get("speed_kph")    # km/h
+    #       best.get("highway")      # tipe jalan: primary/secondary/residential/...
+    #       best.get("name")         # nama jalan
+    #     """
+    #     return _ga_path_cost(G, path)   # default — ganti dengan idemu
 
     def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
         return _ga_crossover(p1, p2, rng)   # TODO: boleh override

@@ -103,27 +103,40 @@ class ResultVisualiser:
             ).add_to(m)
             drawn.append((i, r, color))
 
-        # Marker awal & tujuan
-        folium.Marker(
-            list(scenario.source_coords),
-            popup=folium.Popup(f"<b>FROM</b><br>{scenario.source_label}", max_width=200),
-            tooltip=f"START: {scenario.source_label}",
-            icon=folium.Icon(color="green", icon="play", prefix="glyphicon"),
-        ).add_to(m)
-        folium.Marker(
-            list(scenario.target_coords),
-            popup=folium.Popup(f"<b>TO</b><br>{scenario.target_label}", max_width=200),
-            tooltip=f"END: {scenario.target_label}",
-            icon=folium.Icon(color="red", icon="stop", prefix="glyphicon"),
-        ).add_to(m)
+        # Marker awal, waypoint, dan tujuan
+        for idx, (label, coords) in enumerate(zip(scenario.label_sequence,
+                                                  scenario.coord_sequence), start=1):
+            if idx == 1:
+                title = "START"
+                icon = folium.Icon(color="green", icon="play", prefix="glyphicon")
+            elif idx == len(scenario.label_sequence):
+                title = "END"
+                icon = folium.Icon(color="red", icon="stop", prefix="glyphicon")
+            else:
+                title = f"STOP {idx}"
+                icon = folium.Icon(color="blue", icon="flag", prefix="glyphicon")
+
+            folium.Marker(
+                list(coords),
+                popup=folium.Popup(f"<b>{title}</b><br>{label}", max_width=220),
+                tooltip=f"{title}: {label}",
+                icon=icon,
+            ).add_to(m)
+
+        if len(scenario.coord_sequence) > 1:
+            try:
+                m.fit_bounds([list(c) for c in scenario.coord_sequence], padding=(30, 30))
+            except Exception:
+                pass
 
         # Legend
+        route_label = " -> ".join(scenario.label_sequence)
         legend = (
             "<div style='position:fixed;bottom:30px;left:30px;z-index:9999;"
             "background:white;padding:10px 14px;border-radius:6px;"
-            "border:1px solid #ccc;font-size:12px;line-height:1.9;max-width:260px;'>"
-            f"<b>{scenario.source_label}</b><br>"
-            f"-> <b>{scenario.target_label}</b><br>"
+            "border:1px solid #ccc;font-size:12px;line-height:1.9;max-width:320px;'>"
+            f"<b>{scenario.name}</b><br>"
+            f"<small>{route_label}</small><br>"
             "<hr style='margin:4px 0'>"
         )
         for i, r, c in drawn:
@@ -155,7 +168,12 @@ class ResultVisualiser:
             return
         streets = _route_street_names(G, result.route)
         if streets:
-            log.info(f"    route [{result.algorithm_name}]: {' -> '.join(streets)}")
+            log.info(
+                f"    route [{result.algorithm_name}] "
+                f"{result.total_time_s/60:.1f}min | "
+                f"{result.total_distance_m/1000:.2f}km: "
+                f"{' -> '.join(streets)}"
+            )
 
     # ──────────────────────────────────────────────────────
     # Comparison charts

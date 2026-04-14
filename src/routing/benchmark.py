@@ -3,6 +3,7 @@ Algorithm registry, benchmark runner, and scenario builder.
 """
 
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -66,6 +67,7 @@ def _write_evolution_log(result: RouteResult, log_dir: Path):
         for frame in history:
             gen     = frame["gen"]
             t       = frame["min"]
+            dist    = frame.get("dist")
             impr    = (first_min - t) / first_min * 100 if first_min > 0 else 0.0
             delta   = prev - t
             streets = frame.get("streets", [])
@@ -84,7 +86,10 @@ def _write_evolution_log(result: RouteResult, log_dir: Path):
             route_changed = streets != prev_streets
 
             f.write(f"\n{'─'*60}\n")
-            f.write(f"Gen {gen:>3}  |  {t:.4f} min  |  {impr:.2f}% improved")
+            f.write(f"Gen {gen:>3}  |  {t:.4f} min")
+            if dist is not None:
+                f.write(f"  |  {float(dist):.3f} km")
+            f.write(f"  |  {impr:.2f}% improved")
             if tag:
                 f.write(f"  |  {tag}")
             f.write("\n")
@@ -174,6 +179,97 @@ class BenchmarkRunner:
     def add_scenario(self, scenario: Scenario):
         self.scenarios.append(scenario)
 
+    def _run_algorithm_on_scenario(self,
+                                   algo: BaseRoutingAlgorithm,
+                                   G: nx.MultiDiGraph,
+                                   scenario: Scenario) -> RouteResult:
+        nodes = scenario.node_sequence
+        labels = scenario.label_sequence
+        if len(nodes) <= 2:
+            return algo.safe_run(G, scenario.source_node,
+                                 scenario.target_node, scenario.name)
+
+        t0 = time.perf_counter()
+        full_route: list = []
+        leg_rows: list = []
+        leg_results: list = []
+
+        for idx, (src, dst) in enumerate(zip(nodes[:-1], nodes[1:]), start=1):
+            leg_name = f"{scenario.name}_leg_{idx}"
+            result = algo.safe_run(G, src, dst, leg_name)
+            leg_results.append(result)
+            leg_rows.append({
+                "leg": idx,
+                "from": labels[idx - 1] if idx - 1 < len(labels) else str(src),
+                "to": labels[idx] if idx < len(labels) else str(dst),
+                "found": result.found,
+                "travel_time_s": result.total_time_s if result.found else None,
+                "distance_m": result.total_distance_m if result.found else None,
+                "computation_ms": result.computation_ms,
+                "error": result.error,
+            })
+
+            if not result.found:
+                elapsed = (time.perf_counter() - t0) * 1000
+                err = (f"leg {idx} failed: "
+                       f"{leg_rows[-1]['from']} -> {leg_rows[-1]['to']} | "
+                       f"{result.error}")
+                return RouteResult.failure(algo.name, scenario.name,
+                                           scenario.source_node,
+                                           scenario.target_node,
+                                           err, elapsed)
+
+            if not full_route:
+                full_route.extend(result.route)
+            else:
+                full_route.extend(result.route[1:])
+
+        elapsed = (time.perf_counter() - t0) * 1000
+        metadata = {
+            "multi_stop": True,
+            "stop_count": len(nodes),
+            "stops": labels,
+            "legs": leg_rows,
+        }
+        histories = [r.metadata.get("gen_history") for r in leg_results]
+        if histories and all(histories):
+            gen_count = min(len(h) for h in histories)
+            combined_history = []
+            for gen_idx in range(gen_count):
+                coords = []
+                streets = []
+                total_min = 0.0
+                total_dist = 0.0
+                for history in histories:
+                    frame = history[gen_idx]
+                    frame_coords = frame.get("coords", [])
+                    if coords and frame_coords:
+                        coords.extend(frame_coords[1:])
+                    else:
+                        coords.extend(frame_coords)
+                    streets.extend(frame.get("streets", []))
+                    total_min += float(frame.get("min", 0.0))
+                    total_dist += float(frame.get("dist", 0.0))
+                combined_history.append({
+                    "gen": gen_idx + 1,
+                    "min": round(total_min, 3),
+                    "dist": round(total_dist, 3),
+                    "coords": coords,
+                    "streets": streets,
+                })
+
+            first_meta = leg_results[0].metadata
+            metadata.update({
+                "generations": first_meta.get("generations"),
+                "population": first_meta.get("population"),
+                "crossover_rate": first_meta.get("crossover_rate"),
+                "mutation_rate": first_meta.get("mutation_rate"),
+                "gen_history": combined_history,
+            })
+        return RouteResult.build(G, algo.name, scenario.name,
+                                 scenario.source_node, scenario.target_node,
+                                 full_route, elapsed, metadata)
+
     def run(self, G: nx.MultiDiGraph) -> pd.DataFrame:
         self.results = []
         algos = self.registry.all()
@@ -181,13 +277,12 @@ class BenchmarkRunner:
         log.info(f"\nBenchmark: {len(algos)} algorithms × {len(self.scenarios)} scenarios")
 
         for scenario in self.scenarios:
-            log.info(f"\n  Scenario [{scenario.name}]: "
-                     f"{scenario.source_label} -> {scenario.target_label}")
+            route_label = " -> ".join(scenario.label_sequence)
+            log.info(f"\n  Scenario [{scenario.name}]: {route_label}")
             from src.routing.visualize import ResultVisualiser
             scenario_results = []
             for algo in algos:
-                result = algo.safe_run(G, scenario.source_node,
-                                       scenario.target_node, scenario.name)
+                result = self._run_algorithm_on_scenario(algo, G, scenario)
                 self.results.append(result)
                 scenario_results.append(result)
                 status = "OK   " if result.found else "FAIL "

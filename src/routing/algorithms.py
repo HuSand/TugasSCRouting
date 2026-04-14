@@ -130,6 +130,42 @@ class AStarTime(BaseRoutingAlgorithm):
 
 
 # ──────────────────────────────────────────────────────────────
+class AStarDistance(BaseRoutingAlgorithm):
+    """
+    A* with straight-line (haversine) heuristic, minimising physical distance.
+    Direct comparison for DijkstraDistance, usually with fewer graph expansions.
+    """
+    name        = "astar_distance"
+    description = "A* — minimise distance in metres with haversine heuristic"
+
+    @staticmethod
+    def _heuristic(u, v, G):
+        """Straight-line distance estimate in metres."""
+        try:
+            nu, nv = G.nodes[u], G.nodes[v]
+            lat1, lon1 = math.radians(nu["y"]), math.radians(nu["x"])
+            lat2, lon2 = math.radians(nv["y"]), math.radians(nv["x"])
+            dlat, dlon = lat2 - lat1, lon2 - lon1
+            a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+            return 2 * 6_371_000 * math.asin(math.sqrt(a))
+        except Exception:
+            return 0.0
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        t0 = time.perf_counter()
+        try:
+            route = nx.astar_path(
+                G, source_node, target_node,
+                heuristic=lambda u, v: self._heuristic(u, v, G),
+                weight="length",
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
+
+
 # GA SHARED HELPERS
 # Dipakai oleh semua GA (Sandy, Burhan, Bimo, Gerald).
 # Jangan diubah — kalau mau custom, override di class masing-masing.
@@ -290,12 +326,30 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
             if node:
                 coords.append([round(float(node["y"]), 5),
                                 round(float(node["x"]), 5)])
+
+        ranked = sorted(range(len(population)), key=lambda i: fitness[i])
+        candidate_pool = ranked[:max(2, len(ranked) // 3)]
+        candidate_idx = candidate_pool[gen_idx % len(candidate_pool)]
+        if candidate_idx == best_idx and len(candidate_pool) > 1:
+            candidate_idx = candidate_pool[(gen_idx + 1) % len(candidate_pool)]
+        candidate = population[candidate_idx]
+        candidate_coords = []
+        for n in candidate:
+            node = G.nodes.get(n)
+            if node:
+                candidate_coords.append([round(float(node["y"]), 5),
+                                         round(float(node["x"]), 5)])
+
         gen_history.append({
             "gen":     gen_idx + 1,
             "min":     round(_ga_path_cost(G, elite) / 60, 3),  # selalu tampilkan travel_time asli
             "dist":    round(_ga_path_distance(G, elite) / 1000, 3),
             "coords":  coords,
             "streets": _route_streets(G, elite),
+            "candidate_min":     round(_ga_path_cost(G, candidate) / 60, 3),
+            "candidate_dist":    round(_ga_path_distance(G, candidate) / 1000, 3),
+            "candidate_coords":  candidate_coords,
+            "candidate_streets": _route_streets(G, candidate),
         })
 
         new_pop = [elite]
@@ -740,6 +794,7 @@ def _multi_stop_scenario(name: str, description: str, point_keys: list) -> Scena
         route_nodes=nodes,
         route_labels=labels,
         route_coords=coords,
+        optimize_order=True,
     )
 
 

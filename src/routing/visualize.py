@@ -106,7 +106,10 @@ class ResultVisualiser:
         # Marker awal, waypoint, dan tujuan
         for idx, (label, coords) in enumerate(zip(scenario.label_sequence,
                                                   scenario.coord_sequence), start=1):
-            if idx == 1:
+            if scenario.optimize_order:
+                title = f"DEST {idx}"
+                icon = folium.Icon(color="gray", icon="map-marker", prefix="glyphicon")
+            elif idx == 1:
                 title = "START"
                 icon = folium.Icon(color="green", icon="play", prefix="glyphicon")
             elif idx == len(scenario.label_sequence):
@@ -131,6 +134,8 @@ class ResultVisualiser:
 
         # Legend
         route_label = " -> ".join(scenario.label_sequence)
+        if scenario.optimize_order:
+            route_label = "unordered destinations; each algorithm chooses visit order"
         legend = (
             "<div style='position:fixed;bottom:30px;left:30px;z-index:9999;"
             "background:white;padding:10px 14px;border-radius:6px;"

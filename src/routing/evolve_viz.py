@@ -151,6 +151,14 @@ select:focus{border-color:#e63946}
 #speed-select{background:#374151;color:#e5e7eb;border:1px solid #4b5563;
               border-radius:5px;padding:4px 8px;font-size:12px}
 #progress{height:3px;background:#e63946;width:0%;transition:width .1s linear}
+/* animate toggle */
+#anim-toggle{appearance:none;-webkit-appearance:none;width:36px;height:20px;
+             background:#374151;border-radius:10px;cursor:pointer;position:relative;
+             transition:background .2s;border:none;outline:none;vertical-align:middle}
+#anim-toggle:checked{background:#e63946}
+#anim-toggle::after{content:'';position:absolute;left:3px;top:3px;width:14px;height:14px;
+                    background:#fff;border-radius:50%;transition:left .2s}
+#anim-toggle:checked::after{left:19px}
 /* map legend overlay */
 #map-legend{position:absolute;bottom:24px;right:10px;z-index:999;
             background:rgba(31,41,55,.93);border:1px solid #374151;
@@ -206,6 +214,10 @@ select:focus{border-color:#e63946}
       <option value="40">Turbo</option>
     </select>
   </div>
+  <div class="speed-ctrl">
+    <label>Animate</label>
+    <input type="checkbox" id="anim-toggle" checked title="Animate route drawing">
+  </div>
 </div>
 
 <script>
@@ -224,15 +236,34 @@ let stopMarkers  = [];
 let playTimer    = null;
 let isPlaying    = false;
 
-const algoSel  = document.getElementById('algo-select');
-const scenSel  = document.getElementById('scenario-select');
-const slider   = document.getElementById('gen-slider');
-const genLabel = document.getElementById('gen-label');
-const playBtn  = document.getElementById('play-btn');
-const speedSel = document.getElementById('speed-select');
-const progress = document.getElementById('progress');
-const legend   = document.getElementById('map-legend');
-const legRows  = document.getElementById('legend-rows');
+const algoSel    = document.getElementById('algo-select');
+const scenSel    = document.getElementById('scenario-select');
+const slider     = document.getElementById('gen-slider');
+const genLabel   = document.getElementById('gen-label');
+const playBtn    = document.getElementById('play-btn');
+const speedSel   = document.getElementById('speed-select');
+const animToggle = document.getElementById('anim-toggle');
+const progress   = document.getElementById('progress');
+const legend     = document.getElementById('map-legend');
+const legRows    = document.getElementById('legend-rows');
+
+// ── Path draw animation (SVG stroke-dashoffset trick) ─────────
+function animatePath(polyline, durationMs){
+  if(!animToggle.checked) return;
+  setTimeout(()=>{
+    const el=polyline.getElement();
+    if(!el) return;
+    try{
+      const len=el.getTotalLength();
+      el.style.strokeDasharray=len+' '+len;
+      el.style.strokeDashoffset=len;
+      el.style.transition='none';
+      void el.getBoundingClientRect(); // force reflow so initial state sticks
+      el.style.transition=`stroke-dashoffset ${durationMs}ms ease-out`;
+      el.style.strokeDashoffset='0';
+    }catch(e){}
+  },0);
+}
 
 const IS_ALL = '__ALL__';
 
@@ -320,10 +351,14 @@ function renderGARoute(algoName, genIdx, weight, opacity){
   const drawMin=frame.candidate_min!==undefined ? frame.candidate_min : frame.min;
   const drawDist=frame.candidate_dist!==undefined ? frame.candidate_dist : frame.dist;
   const distText = drawDist!==undefined ? ` | ${Number(drawDist).toFixed(2)} km` : '';
-  gaLayers[algoName]=L.polyline(drawCoords,{
+  const gaPl=L.polyline(drawCoords,{
     color:col(algoName),weight:weight||5,opacity:opacity||.92,
     interactive:true
   }).bindTooltip(`${algoName} | gen ${frame.gen} candidate | ${drawMin.toFixed(1)} min${distText}`).addTo(map);
+  gaLayers[algoName]=gaPl;
+  // animate line draw — duration scales with playback speed so fast/turbo still feel snappy
+  const speedMs=parseInt(speedSel.value,10);
+  animatePath(gaPl, Math.min(Math.round(speedMs*0.75), 650));
 }
 
 // ── Render static baseline route ─────────────────────────────
@@ -343,8 +378,10 @@ function renderBaseline(algoName){
     baselineStyle.opacity=.9;
     baselineStyle.weight=4;
   }
-  baseLayers[algoName]=L.polyline(b.coords,baselineStyle)
+  const basePl=L.polyline(b.coords,baselineStyle)
     .bindTooltip(`${algoName} | ${b.min.toFixed(1)} min | ${b.dist.toFixed(2)} km (static)`).addTo(map);
+  baseLayers[algoName]=basePl;
+  animatePath(basePl, 1100);
 }
 
 // ── Update legend ─────────────────────────────────────────────

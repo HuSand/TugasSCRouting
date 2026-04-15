@@ -657,12 +657,6 @@ class BurhanGA(BaseRoutingAlgorithm):
     MUTATION_RATE   = 0.4   # TODO: coba variasikan
     TOURNAMENT_SIZE = 5     # TODO: coba variasikan
     RANDOM_SEED     = 99
-    POPULATION_SIZE = 80    # TODO: coba variasikan
-    GENERATIONS     = 120    # TODO: coba variasikan
-    CROSSOVER_RATE  = 0.9   # TODO: coba variasikan
-    MUTATION_RATE   = 0.4   # TODO: coba variasikan
-    TOURNAMENT_SIZE = 5     # TODO: coba variasikan
-    RANDOM_SEED     = 99
     # ─────────────────────────────────────────────────────────
 
     def _fitness(self, G, path: list) -> float:
@@ -756,74 +750,7 @@ class BurhanGA(BaseRoutingAlgorithm):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
 class AntColonyRouting(BaseRoutingAlgorithm):
-    """
-    ── ANT COLONY OPTIMIZATION (ACO) ────────────────────────────
- 
-    DESKRIPSI ALGORITMA
-    ────────────────────
-    ACO terinspirasi dari perilaku semut nyata yang mencari
-    makanan. Semut meninggalkan jejak feromon di jalur yang
-    dilalui. Semut berikutnya cenderung mengikuti jalur dengan
-    feromon lebih kuat — jalur pendek cepat terakumulasi
-    feromon karena semut pulang-pergi lebih sering.
- 
-    Dalam konteks routing jalan kota, setiap "semut" adalah
-    agen yang membangun rute dari source ke target dengan
-    memilih node berikutnya secara probabilistik berdasarkan:
-      - Feromon τ(u,v)   : seberapa sering edge ini dipakai
-      - Visibilitas η(u,v): kebalikan travel_time (1/t)
-                           makin cepat edge → makin menarik
- 
-    ALUR ALGORITMA
-    ───────────────
-    1. Inisialisasi feromon τ = τ₀ pada semua edge
-    2. Untuk setiap iterasi:
-         a. Setiap semut membangun rute greedy dari source ke
-            target menggunakan probabilitas transisi
-         b. Feromon menguap (evaporasi): τ ← (1-ρ) × τ
-         c. Semut terbaik iterasi ini deposit feromon di
-            jalurnya: τ ← τ + Q / cost_rute
-    3. Kembalikan rute terbaik yang pernah ditemukan
- 
-    PROBABILITAS TRANSISI
-    ──────────────────────
-    Dari node u, semut memilih tetangga v dengan probabilitas:
- 
-        P(u→v) = [τ(u,v)]^α × [η(u,v)]^β
-                 ────────────────────────────
-                 Σ [τ(u,k)]^α × [η(u,k)]^β
-                   k ∈ kandidat
- 
-        τ(u,v) = feromon pada edge u→v
-        η(u,v) = 1 / travel_time(u,v)   (visibilitas)
-        α      = bobot feromon
-        β      = bobot visibilitas
- 
-    TANPA WEIGHTING JENIS JALAN
-    ────────────────────────────
-    Berbeda dari AWA*, ACO murni menggunakan travel_time sebagai
-    satu-satunya sinyal kualitas edge (via visibilitas η).
-    Tidak ada penalti jenis jalan — jalan dipilih sepenuhnya
-    berdasarkan pengalaman kolektif koloni (feromon) dan
-    kecepatan aktual (travel_time).
- 
-    PERBANDINGAN DENGAN ALGORITMA LAIN DI FILE INI
-    ────────────────────────────────────────────────
-    ┌──────────────────┬──────────┬──────────┬──────────┬──────────┐
-    │ Fitur            │Dijkstra  │ A*       │ GA       │ ACO(ini) │
-    ├──────────────────┼──────────┼──────────┼──────────┼──────────┤
-    │ Tipe             │ Exact    │ Exact    │ Meta-    │ Meta-    │
-    │                  │          │          │ heuristik│ heuristik│
-    │ Heuristic        │    ✗     │    ✓     │    ✗     │    ✓*    │
-    │ Pembelajaran     │    ✗     │    ✗     │    ✓     │    ✓     │
-    │ Jaminan optimal  │    ✓     │    ✓     │    ✗     │    ✗     │
-    │ Paralelisme      │    ✗     │    ✗     │    ✓     │    ✓     │
-    │ Memory feromon   │    ✗     │    ✗     │    ✗     │    ✓     │
-    └──────────────────┴──────────┴──────────┴──────────┴──────────┘
-    *η = visibilitas berbasis travel_time, bukan heuristic spasial
-    ─────────────────────────────────────────────────────────────
-    """
- 
+     
     name        = "aco_routing"
     description = "Ant Colony Optimization — feromon + visibilitas travel_time"
  

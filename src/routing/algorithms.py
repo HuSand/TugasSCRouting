@@ -128,7 +128,6 @@ class AStarTime(BaseRoutingAlgorithm):
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
 
-
 # ──────────────────────────────────────────────────────────────
 class AStarDistance(BaseRoutingAlgorithm):
     """
@@ -166,6 +165,8 @@ class AStarDistance(BaseRoutingAlgorithm):
         return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
 
 
+
+# ──────────────────────────────────────────────────────────────
 # GA SHARED HELPERS
 # Dipakai oleh semua GA (Sandy, Burhan, Bimo, Gerald).
 # Jangan diubah — kalau mau custom, override di class masing-masing.
@@ -362,30 +363,12 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
             if node:
                 coords.append([round(float(node["y"]), 5),
                                 round(float(node["x"]), 5)])
-
-        ranked = sorted(range(len(population)), key=lambda i: fitness[i])
-        candidate_pool = ranked[:max(2, len(ranked) // 3)]
-        candidate_idx = candidate_pool[gen_idx % len(candidate_pool)]
-        if candidate_idx == best_idx and len(candidate_pool) > 1:
-            candidate_idx = candidate_pool[(gen_idx + 1) % len(candidate_pool)]
-        candidate = population[candidate_idx]
-        candidate_coords = []
-        for n in candidate:
-            node = G.nodes.get(n)
-            if node:
-                candidate_coords.append([round(float(node["y"]), 5),
-                                         round(float(node["x"]), 5)])
-
         gen_history.append({
             "gen":     gen_idx + 1,
             "min":     round(_ga_path_cost(G, elite) / 60, 3),  # selalu tampilkan travel_time asli
             "dist":    round(_ga_path_distance(G, elite) / 1000, 3),
             "coords":  coords,
             "streets": _route_streets(G, elite),
-            "candidate_min":     round(_ga_path_cost(G, candidate) / 60, 3),
-            "candidate_dist":    round(_ga_path_distance(G, candidate) / 1000, 3),
-            "candidate_coords":  candidate_coords,
-            "candidate_streets": _route_streets(G, candidate),
         })
 
         new_pop = [elite]
@@ -665,6 +648,7 @@ class BurhanGA(BaseRoutingAlgorithm):
     """
     name        = "burhan_ga"
     description = "Burhan — GA optimized (time + road quality + simplicity)"
+    description = "Burhan — GA optimized (time + road quality + simplicity)"
 
     # ── TUNING ZONE Burhan -- UBAH ANGKA INI ─────────────────
     POPULATION_SIZE = 80    # TODO: coba variasikan
@@ -676,15 +660,8 @@ class BurhanGA(BaseRoutingAlgorithm):
     # ─────────────────────────────────────────────────────────
 
     def _fitness(self, G, path: list) -> float:
-        """
-        Smart fitness:
-        - Minimasi waktu (utama)
-        - Penalti rute terlalu kompleks (banyak edge)
-        - Reward jalan cepat (speed tinggi)
-        """
-
         total_time = 0.0
-        total_length = 0.0
+        total_dist = 0.0
         total_speed = 0.0
         edges_count = 0
 
@@ -696,11 +673,11 @@ class BurhanGA(BaseRoutingAlgorithm):
             best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
 
             tt = float(best.get("travel_time", 9999))
-            length = float(best.get("length", 0))
-            speed = float(best.get("speed_kph", 30))  # fallback 30
+            dist = float(best.get("length", 0))
+            speed = float(best.get("speed_kph", 30))
 
             total_time += tt
-            total_length += length
+            total_dist += dist
             total_speed += speed
             edges_count += 1
 
@@ -709,15 +686,29 @@ class BurhanGA(BaseRoutingAlgorithm):
 
         avg_speed = total_speed / edges_count
 
-        # ── FITNESS FORMULA ─────────────────────────────
-        # 1. waktu = prioritas utama
-        # 2. penalti kompleksitas (banyak belokan)
-        # 3. reward jalan cepat
+        # 🔥 NORMALIZATION (ini yang bikin beda)
+        norm_time = total_time / 1000
+        norm_dist = total_dist / 5000
+        norm_complexity = edges_count / 50
+        norm_speed = avg_speed / 50
 
-        complexity_penalty = edges_count * 2.0
-        speed_reward = avg_speed * 5.0
+        # 🔥 WEIGHTED MULTI-OBJECTIVE
+        return (
+            0.55 * norm_time +
+            0.20 * norm_dist +
+            0.15 * norm_complexity -
+            0.25 * norm_speed
+        )
 
-        return total_time + complexity_penalty - speed_reward
+        # # ── FITNESS FORMULA ─────────────────────────────
+        # # 1. waktu = prioritas utama
+        # # 2. penalti kompleksitas (banyak belokan)
+        # # 3. reward jalan cepat
+
+        # complexity_penalty = edges_count * 2.0
+        # speed_reward = avg_speed * 5.0
+
+        # return total_time + complexity_penalty - speed_reward
 
     # def _fitness(self, G, path: list) -> float:
     #     """
@@ -725,7 +716,19 @@ class BurhanGA(BaseRoutingAlgorithm):
 
     #     Nilai return harus berupa float — semakin kecil = semakin baik.
     #     Defaultnya minimasi travel_time (sama seperti Dijkstra).
+    #     Nilai return harus berupa float — semakin kecil = semakin baik.
+    #     Defaultnya minimasi travel_time (sama seperti Dijkstra).
 
+    #     Edge attributes yang bisa kamu pakai per edge (u, v):
+    #       best = min(G.get_edge_data(u,v).values(),
+    #                  key=lambda d: float(d.get("travel_time", 9999)))
+    #       best.get("travel_time")  # detik
+    #       best.get("length")       # meter
+    #       best.get("speed_kph")    # km/h
+    #       best.get("highway")      # tipe jalan: primary/secondary/residential/...
+    #       best.get("name")         # nama jalan
+    #     """
+    #     return _ga_path_cost(G, path)   # default — ganti dengan idemu
     #     Edge attributes yang bisa kamu pakai per edge (u, v):
     #       best = min(G.get_edge_data(u,v).values(),
     #                  key=lambda d: float(d.get("travel_time", 9999)))
@@ -746,6 +749,279 @@ class BurhanGA(BaseRoutingAlgorithm):
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
+class AntColonyRouting(BaseRoutingAlgorithm):
+     
+    name        = "aco_routing"
+    description = "Ant Colony Optimization — feromon + visibilitas travel_time"
+ 
+    # ------------------------------------------------------------------
+    # PARAMETER TUNING
+    # ------------------------------------------------------------------
+    N_ANTS        = 20     # jumlah semut per iterasi
+    N_ITERATIONS  = 30     # jumlah iterasi koloni
+    ALPHA         = 1.0    # bobot feromon τ — naikkan → lebih eksploitatif
+    BETA          = 2.0    # bobot visibilitas η — naikkan → lebih greedy
+    RHO           = 0.1    # laju evaporasi feromon (0.0–1.0)
+                           # kecil → feromon bertahan lama (memori panjang)
+                           # besar → feromon cepat hilang (eksplorasi lebih)
+    Q             = 100.0  # konstanta deposit feromon
+    TAU_INIT      = 1.0    # nilai feromon awal semua edge
+    RANDOM_SEED   = 42
+ 
+    # ------------------------------------------------------------------
+    # HELPER 1: bangun graph sederhana (node → neighbors dengan cost)
+    #           dari subset node yang relevan sekitar jalur source-target
+    # ------------------------------------------------------------------
+    def _get_candidates(self, G, node: int, visited: set) -> list:
+        """
+        Kembalikan list tetangga yang belum dikunjungi dari node ini,
+        beserta travel_time edge terbaik ke masing-masing tetangga.
+        Format: [(neighbor, travel_time), ...]
+        """
+        candidates = []
+        for neighbor in G.successors(node):
+            if neighbor in visited:
+                continue
+            edge_dict = G.get_edge_data(node, neighbor)
+            if not edge_dict:
+                continue
+            best_tt = min(
+                float(d.get("travel_time", 9999))
+                for d in edge_dict.values()
+            )
+            if best_tt < 9999:
+                candidates.append((neighbor, best_tt))
+        return candidates
+ 
+    # ------------------------------------------------------------------
+    # HELPER 2: satu semut membangun rute dari source ke target
+    # ------------------------------------------------------------------
+    def _build_ant_path(
+        self,
+        G,
+        source: int,
+        target: int,
+        pheromone: dict,
+        rng: random.Random,
+        max_steps: int
+    ) -> list | None:
+        """
+        Semut bergerak dari source ke target dengan memilih node
+        berikutnya secara probabilistik.
+ 
+        Strategi:
+          - Jika target ada di antara kandidat → langsung pilih target
+          - Jika tidak ada kandidat → gunakan Dijkstra sebagai fallback
+            untuk melanjutkan ke node terdekat menuju target
+          - Jika melebihi max_steps → batalkan (path terlalu panjang)
+ 
+        Returns: list node IDs, atau None jika gagal
+        """
+        path    = [source]
+        visited = {source}
+        current = source
+ 
+        for _ in range(max_steps):
+            if current == target:
+                return path
+ 
+            candidates = self._get_candidates(G, current, visited)
+ 
+            # Tidak ada kandidat → coba Dijkstra lokal sebagai bridge
+            if not candidates:
+                try:
+                    bridge = nx.shortest_path(
+                        G, current, target, weight="travel_time"
+                    )
+                    # Gabungkan path yang sudah ada dengan sisa bridge
+                    path += bridge[1:]
+                    return path
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
+                    return None
+ 
+            # Shortcut: jika target langsung bisa dicapai
+            target_candidates = [(n, tt) for n, tt in candidates if n == target]
+            if target_candidates:
+                path.append(target)
+                return path
+ 
+            # ── Hitung probabilitas transisi ──────────────────────
+            scores = []
+            for neighbor, tt in candidates:
+                tau = pheromone.get((current, neighbor), self.TAU_INIT)
+                eta = 1.0 / tt if tt > 0 else 1.0
+                score = (tau ** self.ALPHA) * (eta ** self.BETA)
+                scores.append(score)
+ 
+            total = sum(scores)
+            if total == 0:
+                # Semua skor nol → pilih acak (fallback uniform)
+                chosen = rng.choice(candidates)[0]
+            else:
+                # Roulette wheel selection
+                probs   = [s / total for s in scores]
+                r       = rng.random()
+                cumul   = 0.0
+                chosen  = candidates[-1][0]  # default: kandidat terakhir
+                for (neighbor, _), prob in zip(candidates, probs):
+                    cumul += prob
+                    if r <= cumul:
+                        chosen = neighbor
+                        break
+ 
+            path.append(chosen)
+            visited.add(chosen)
+            current = chosen
+ 
+        return None  # melebihi max_steps
+ 
+    # ------------------------------------------------------------------
+    # HELPER 3: hitung total travel_time sebuah path
+    # ------------------------------------------------------------------
+    def _path_cost(self, G, path: list) -> float:
+        """
+        Total travel_time (detik) sepanjang path.
+        Pakai edge terbaik (travel_time terkecil) untuk setiap hop.
+        """
+        total = 0.0
+        for u, v in zip(path[:-1], path[1:]):
+            edge_dict = G.get_edge_data(u, v)
+            if not edge_dict:
+                return float("inf")
+            best_tt = min(
+                float(d.get("travel_time", 9999))
+                for d in edge_dict.values()
+            )
+            total += best_tt
+        return total
+ 
+    # ------------------------------------------------------------------
+    # HELPER 4: deposit feromon pada path terbaik iterasi
+    # ------------------------------------------------------------------
+    def _deposit_pheromone(
+        self,
+        pheromone: dict,
+        path: list,
+        cost: float
+    ) -> None:
+        """
+        Semut terbaik deposit feromon di sepanjang jalurnya.
+        Jalur lebih pendek → deposit lebih banyak (Q / cost).
+        """
+        deposit = self.Q / cost if cost > 0 else 0.0
+        for u, v in zip(path[:-1], path[1:]):
+            key = (u, v)
+            pheromone[key] = pheromone.get(key, self.TAU_INIT) + deposit
+ 
+    # ------------------------------------------------------------------
+    # CORE: jalankan koloni ACO
+    # ------------------------------------------------------------------
+    def _run_aco(self, G, source: int, target: int) -> list:
+        """
+        Jalankan N_ITERATIONS iterasi koloni ACO.
+ 
+        Setiap iterasi:
+          1. N_ANTS semut membangun path masing-masing
+          2. Feromon menguap (evaporasi global)
+          3. Semut terbaik iterasi deposit feromon
+          4. Update global best jika ada yang lebih baik
+ 
+        Returns: path terbaik yang ditemukan (list node IDs)
+        Raises : nx.NetworkXNoPath jika tidak ada path sama sekali
+        """
+        rng        = random.Random(self.RANDOM_SEED)
+        pheromone  = {}  # sparse dict: (u,v) → tau value
+        best_path  = None
+        best_cost  = float("inf")
+ 
+        # Estimasi max_steps: 3× jumlah node di subgraph lokal
+        # (batas atas agar semut tidak loop selamanya)
+        max_steps = min(G.number_of_nodes(), 5000)
+ 
+        for iteration in range(self.N_ITERATIONS):
+            iter_best_path = None
+            iter_best_cost = float("inf")
+ 
+            # ── Setiap semut bangun satu path ──────────────────
+            for _ in range(self.N_ANTS):
+                path = self._build_ant_path(
+                    G, source, target, pheromone, rng, max_steps
+                )
+                if path is None or path[-1] != target:
+                    continue
+ 
+                cost = self._path_cost(G, path)
+                if cost < iter_best_cost:
+                    iter_best_path = path
+                    iter_best_cost = cost
+ 
+            # ── Evaporasi feromon (semua edge) ─────────────────
+            for key in list(pheromone.keys()):
+                pheromone[key] *= (1.0 - self.RHO)
+                if pheromone[key] < 1e-6:
+                    del pheromone[key]  # bersihkan nilai sangat kecil
+ 
+            # ── Deposit feromon dari semut terbaik iterasi ─────
+            if iter_best_path is not None:
+                self._deposit_pheromone(pheromone, iter_best_path, iter_best_cost)
+ 
+                # Update global best
+                if iter_best_cost < best_cost:
+                    best_path = iter_best_path
+                    best_cost = iter_best_cost
+ 
+        # Fallback: jika tidak ada semut berhasil, pakai Dijkstra
+        if best_path is None:
+            try:
+                best_path = nx.shortest_path(
+                    G, source, target, weight="travel_time"
+                )
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                raise nx.NetworkXNoPath(
+                    f"ACO: tidak ada jalur dari {source} ke {target}"
+                )
+ 
+        return best_path
+ 
+    # ------------------------------------------------------------------
+    # INTERFACE WAJIB — dipanggil oleh framework benchmark
+    # ------------------------------------------------------------------
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        """
+        Entry point yang dipanggil oleh benchmark.
+        Menjalankan ACO dan membungkus hasilnya dalam RouteResult.
+        """
+        t0 = time.perf_counter()
+        try:
+            route = self._run_aco(G, source_node, target_node)
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name,
+                source_node, target_node, str(e), ms
+            )
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name,
+            source_node, target_node, route, ms,
+            metadata={
+                "n_ants":       self.N_ANTS,
+                "n_iterations": self.N_ITERATIONS,
+                "alpha":        self.ALPHA,
+                "beta":         self.BETA,
+                "rho":          self.RHO,
+                "strategy":     "pheromone × (1/travel_time) visibility, no highway weighting",
+            }
+        )
+ 
+ 
+# ──────────────────────────────────────────────────────────────
+# CARA REGISTRASI
+# Tambahkan baris ini di bagian paling bawah algorithms.py:
+#
+#   REGISTRY.register(AntColonyRouting())
+#
+# ──────────────────────────────────────────────────────────────
 
 # ──────────────────────────────────────────────────────────────
 # BIMO — TODO: isi bagian ini
@@ -1149,8 +1425,6 @@ def _multi_stop_scenario(
         route_nodes=nodes,
         route_labels=labels,
         route_coords=coords,
-        optimize_order=True,
-        round_trip=round_trip,
     )
 
 

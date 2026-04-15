@@ -484,7 +484,7 @@ def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
         ChristofidesAlgorithm,
-        SandyGA, BurhanGA, BimoGA, GeraldGA,
+        SandyGA, BurhanGA, BimoGA, GeraldGA, AntColonyRouting,
         EXAMPLE_SCENARIOS,
     )
     from src.routing.visualize import ResultVisualiser
@@ -527,6 +527,7 @@ def run_platform(cfg):
     registry.register(BurhanGA())         # Burhan
     registry.register(BimoGA())           # Bimo
     registry.register(GeraldGA())         # Gerald
+    registry.register(AntColonyRouting())
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────

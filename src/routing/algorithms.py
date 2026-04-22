@@ -1425,6 +1425,7 @@ def _multi_stop_scenario(
         route_nodes=nodes,
         route_labels=labels,
         route_coords=coords,
+        round_trip=round_trip,
     )
 
 

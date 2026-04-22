@@ -121,24 +121,42 @@ class ResultVisualiser:
             drawn.append((i, r, color))
 
         # Marker awal, waypoint, dan tujuan
+        n_stops = len(scenario.label_sequence)
         for idx, (label, coords) in enumerate(zip(scenario.label_sequence,
                                                   scenario.coord_sequence), start=1):
+            lbl_lower = label.lower()
             if scenario.optimize_order:
                 title = f"DEST {idx}"
-                icon = folium.Icon(color="gray", icon="map-marker", prefix="glyphicon")
+                icon  = folium.Icon(color="gray", icon="map-marker", prefix="glyphicon")
             elif idx == 1:
-                title = "START"
-                icon = folium.Icon(color="green", icon="play", prefix="glyphicon")
-            elif idx == len(scenario.label_sequence):
+                title = "BASE / START" if scenario.round_trip else "START"
+                icon  = folium.Icon(color="green", icon="home", prefix="glyphicon")
+            elif idx == n_stops and not scenario.round_trip:
                 title = "END"
-                icon = folium.Icon(color="red", icon="stop", prefix="glyphicon")
+                icon  = folium.Icon(color="red", icon="stop", prefix="glyphicon")
             else:
                 title = f"STOP {idx}"
-                icon = folium.Icon(color="blue", icon="flag", prefix="glyphicon")
+                if any(k in lbl_lower for k in ("polisi", "polsek", "polres", "polda",
+                                                  "brimob", "samsat", "polantas",
+                                                  "satlantas", "satpas")):
+                    stop_color = "red"
+                elif any(k in lbl_lower for k in ("kebakaran", "pemadam")):
+                    stop_color = "orange"
+                elif any(k in lbl_lower for k in ("terminal", "stasiun", "pelabuhan")):
+                    stop_color = "blue"
+                elif any(k in lbl_lower for k in ("spbu", "pertamina", "shell", "bp")):
+                    stop_color = "gray"
+                else:
+                    stop_color = "blue"
+                icon = folium.Icon(color=stop_color, icon="flag", prefix="glyphicon")
+
+            popup_body = f"<b>{title}</b><br>{label}"
+            if idx == 1 and scenario.round_trip:
+                popup_body += "<br><i>(route returns here)</i>"
 
             folium.Marker(
                 list(coords),
-                popup=folium.Popup(f"<b>{title}</b><br>{label}", max_width=220),
+                popup=folium.Popup(popup_body, max_width=240),
                 tooltip=f"{title}: {label}",
                 icon=icon,
             ).add_to(m)

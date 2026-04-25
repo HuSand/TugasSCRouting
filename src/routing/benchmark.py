@@ -3,7 +3,10 @@ Algorithm registry, benchmark runner, and scenario builder.
 """
 
 import logging
+import os
+import pickle
 import time
+from multiprocessing import Pool
 from itertools import permutations
 from datetime import datetime
 from pathlib import Path
@@ -192,11 +195,11 @@ class BenchmarkRunner:
     def _order_weight(algo: BaseRoutingAlgorithm) -> str:
         return "length" if "distance" in algo.name else "travel_time"
 
-    def _best_visit_order(self,
-                          G: nx.MultiDiGraph,
+    @staticmethod
+    def _best_visit_order(G: nx.MultiDiGraph,
                           algo: BaseRoutingAlgorithm,
                           nodes: list) -> tuple:
-        weight = self._order_weight(algo)
+        weight = BenchmarkRunner._order_weight(algo)
         if len(nodes) <= 2:
             return nodes, weight, 0.0
 
@@ -223,8 +226,8 @@ class BenchmarkRunner:
 
         return best_order or nodes, weight, best_cost
 
-    def _run_algorithm_on_scenario(self,
-                                   algo: BaseRoutingAlgorithm,
+    @staticmethod
+    def _run_algorithm_on_scenario(algo: BaseRoutingAlgorithm,
                                    G: nx.MultiDiGraph,
                                    scenario: Scenario) -> RouteResult:
         nodes = scenario.node_sequence
@@ -250,7 +253,7 @@ class BenchmarkRunner:
         order_objective = "fixed"
         order_score = None
         if scenario.optimize_order:
-            ordered_nodes, order_objective, order_score = self._best_visit_order(
+            ordered_nodes, order_objective, order_score = BenchmarkRunner._best_visit_order(
                 G, algo, nodes
             )
             idx_by_node = {node: i for i, node in enumerate(nodes)}
@@ -383,21 +386,236 @@ class BenchmarkRunner:
                                  nodes[0], nodes[-1],
                                  full_route, elapsed, metadata)
 
-    def run(self, G: nx.MultiDiGraph) -> pd.DataFrame:
-        self.results = []
-        algos = self.registry.all()
+    def _run_scenario_parallel_legs(self,
+                                    G: nx.MultiDiGraph,
+                                    scenario: Scenario,
+                                    algos: list,
+                                    n_workers: int) -> dict:
+        """
+        Flat-pool variant: every (algo × leg) pair is an independent task so
+        all available cores stay busy instead of one core per algo.
+        Returns dict[algo_name -> RouteResult].
+        """
+        # ── 1. Prep: compute visit order per algo, build flat task list ───
+        algo_meta = {}
+        flat_tasks = []
 
-        log.info(f"\nBenchmark: {len(algos)} algorithms × {len(self.scenarios)} scenarios")
+        for algo in algos:
+            if getattr(algo, "name", "") == "christofides" and scenario.is_multi_stop:
+                algo_meta[algo.name] = {"mode": "christofides"}
+                continue
+
+            nodes  = list(scenario.node_sequence)
+            labels = list(scenario.label_sequence)
+            coords = list(scenario.coord_sequence)
+
+            if len(nodes) <= 2 and not scenario.round_trip:
+                algo_meta[algo.name] = {"mode": "simple"}
+                continue
+
+            order_objective = "fixed"
+            order_score     = None
+            if scenario.optimize_order:
+                ordered, order_objective, order_score = BenchmarkRunner._best_visit_order(
+                    G, algo, nodes
+                )
+                idx_by_node = {n: i for i, n in enumerate(nodes)}
+                order_idx   = [idx_by_node[n] for n in ordered]
+                nodes       = ordered
+                labels      = [labels[i] for i in order_idx]
+                coords      = [coords[i] for i in order_idx]
+
+            task_start = len(flat_tasks)
+            legs_info  = []
+            for idx, (src, dst) in enumerate(zip(nodes[:-1], nodes[1:]), start=1):
+                leg_name = f"{scenario.name}_leg_{idx}"
+                flat_tasks.append((algo, src, dst, leg_name))
+                legs_info.append({
+                    "idx": idx,
+                    "from": labels[idx - 1] if idx - 1 < len(labels) else str(src),
+                    "to":   labels[idx]     if idx     < len(labels) else str(dst),
+                })
+
+            if scenario.round_trip:
+                flat_tasks.append((algo, nodes[-1], nodes[0],
+                                   f"{scenario.name}_return"))
+                legs_info.append({
+                    "idx": len(nodes),
+                    "from": labels[-1] if labels else str(nodes[-1]),
+                    "to":   labels[0]  if labels else str(nodes[0]),
+                })
+
+            algo_meta[algo.name] = {
+                "mode":             "multi",
+                "nodes":            nodes,
+                "labels":           labels,
+                "coords":           coords,
+                "order_objective":  order_objective,
+                "order_score":      order_score,
+                "task_start":       task_start,
+                "task_count":       len(legs_info),
+                "legs_info":        legs_info,
+            }
+
+        # ── 2. Run all tasks in a flat pool ───────────────────────────────
+        results_by_name: dict = {}
+        flat_results: list    = []
+        if flat_tasks:
+            actual_workers = min(len(flat_tasks), n_workers)
+            g_bytes = pickle.dumps(G)
+            with Pool(processes=actual_workers,
+                      initializer=_worker_init,
+                      initargs=(g_bytes,)) as pool:
+                flat_results = pool.map(_leg_task, flat_tasks)
+
+        # ── 3. Handle special-case algos in main process ──────────────────
+        for algo in algos:
+            meta = algo_meta.get(algo.name, {"mode": "simple"})
+
+            if meta["mode"] == "christofides":
+                if hasattr(algo, "_route_multi_stop"):
+                    results_by_name[algo.name] = algo._route_multi_stop(
+                        G, scenario.node_sequence, scenario.name,
+                        source_node=scenario.source_node,
+                        target_node=scenario.target_node,
+                    )
+                continue
+
+            if meta["mode"] == "simple":
+                results_by_name[algo.name] = algo.safe_run(
+                    G, scenario.source_node, scenario.target_node, scenario.name
+                )
+                continue
+
+            # ── 4. Assemble multi-stop result from leg results ────────────
+            leg_results = flat_results[meta["task_start"]:
+                                       meta["task_start"] + meta["task_count"]]
+            nodes      = meta["nodes"]
+            full_route: list = []
+            leg_rows:   list = []
+            total_ms         = sum(r.computation_ms for r in leg_results)
+            failed           = False
+
+            for result, info in zip(leg_results, meta["legs_info"]):
+                leg_rows.append({
+                    "leg":           info["idx"],
+                    "from":          info["from"],
+                    "to":            info["to"],
+                    "found":         result.found,
+                    "travel_time_s": result.total_time_s    if result.found else None,
+                    "distance_m":    result.total_distance_m if result.found else None,
+                    "computation_ms": result.computation_ms,
+                    "error":         result.error,
+                })
+                if not result.found:
+                    failed = True
+                    err = (f"leg {info['idx']} failed: "
+                           f"{info['from']} -> {info['to']} | {result.error}")
+                    results_by_name[algo.name] = RouteResult.failure(
+                        algo.name, scenario.name,
+                        nodes[0], nodes[-1], err, total_ms
+                    )
+                    break
+                if not full_route:
+                    full_route.extend(result.route)
+                else:
+                    full_route.extend(result.route[1:])
+
+            if failed:
+                continue
+
+            metadata = {
+                "multi_stop":        True,
+                "round_trip":        scenario.round_trip,
+                "stop_count":        len(nodes),
+                "stops":             meta["labels"],
+                "visit_order_nodes": nodes,
+                "visit_order_coords": meta["coords"],
+                "order_objective":   meta["order_objective"],
+                "order_score":       meta["order_score"],
+                "legs":              leg_rows,
+            }
+
+            # Combine gen_history across legs (same logic as _run_algorithm_on_scenario)
+            histories = [r.metadata.get("gen_history") for r in leg_results]
+            if histories and all(histories):
+                gen_count = min(len(h) for h in histories)
+                combined  = []
+                for gi in range(gen_count):
+                    coords_acc = []; cand_coords = []; streets = []; cand_streets = []
+                    t_min = t_dist = c_min = c_dist = 0.0
+                    for h in histories:
+                        fr = h[gi]
+                        fc = fr.get("coords", [])
+                        coords_acc   = coords_acc + fc[1:] if coords_acc and fc else coords_acc + fc
+                        streets     += fr.get("streets", [])
+                        t_min       += float(fr.get("min",  0.0))
+                        t_dist      += float(fr.get("dist", 0.0))
+                        cc = fr.get("candidate_coords", fc)
+                        cand_coords  = cand_coords + cc[1:] if cand_coords and cc else cand_coords + cc
+                        cand_streets += fr.get("candidate_streets", fr.get("streets", []))
+                        c_min       += float(fr.get("candidate_min", fr.get("min",  0.0)))
+                        c_dist      += float(fr.get("candidate_dist", fr.get("dist", 0.0)))
+                    combined.append({
+                        "gen": gi + 1,
+                        "min": round(t_min, 3),  "dist": round(t_dist, 3),
+                        "coords": coords_acc,     "streets": streets,
+                        "candidate_min":  round(c_min,  3),
+                        "candidate_dist": round(c_dist, 3),
+                        "candidate_coords":   cand_coords,
+                        "candidate_streets":  cand_streets,
+                    })
+                fm = leg_results[0].metadata
+                metadata.update({
+                    "generations":    fm.get("generations"),
+                    "population":     fm.get("population"),
+                    "crossover_rate": fm.get("crossover_rate"),
+                    "mutation_rate":  fm.get("mutation_rate"),
+                    "gen_history":    combined,
+                })
+
+            results_by_name[algo.name] = RouteResult.build(
+                G, algo.name, scenario.name,
+                nodes[0], nodes[-1], full_route, total_ms, metadata
+            )
+
+        return results_by_name
+
+    def run(self, G: nx.MultiDiGraph, parallel_legs: bool = False) -> pd.DataFrame:
+        from src.routing.visualize import ResultVisualiser
+
+        self.results = []
+        algos     = self.registry.all()
+        n_workers = min(len(algos), os.cpu_count() or 1)
+        mode      = "algo+leg" if parallel_legs else "algo"
+        log.info(f"\nBenchmark: {len(algos)} algorithms × {len(self.scenarios)} scenarios "
+                 f"(parallel mode={mode}, workers={n_workers})")
 
         for scenario in self.scenarios:
             route_label = " -> ".join(scenario.label_sequence)
             log.info(f"\n  Scenario [{scenario.name}]: {route_label}")
-            from src.routing.visualize import ResultVisualiser
-            scenario_results = []
+
+            if parallel_legs:
+                n_leg_workers = min(
+                    len(algos) * max(len(scenario.node_sequence) - 1, 1),
+                    os.cpu_count() or 1,
+                )
+                results_by_name = self._run_scenario_parallel_legs(
+                    G, scenario, algos, n_leg_workers
+                )
+            else:
+                results_by_name = {}
+                g_bytes = pickle.dumps(G)
+                tasks   = [(algo, scenario) for algo in algos]
+                with Pool(processes=n_workers,
+                          initializer=_worker_init,
+                          initargs=(g_bytes,)) as pool:
+                    for algo, result in zip(algos, pool.map(_algo_task, tasks)):
+                        results_by_name[algo.name] = result
+
             for algo in algos:
-                result = self._run_algorithm_on_scenario(algo, G, scenario)
+                result = results_by_name[algo.name]
                 self.results.append(result)
-                scenario_results.append(result)
                 status = "OK   " if result.found else "FAIL "
                 log.info(f"    {status} [{algo.name:<22}]  "
                          f"time={result.total_time_s/60:5.1f}min  "
@@ -443,6 +661,22 @@ class BenchmarkRunner:
             row.update({f"meta_{k}": v for k, v in r.metadata.items()})
             rows.append(row)
         return pd.DataFrame(rows)
+
+
+_worker_G = None
+
+def _worker_init(g_bytes: bytes):
+    global _worker_G
+    _worker_G = pickle.loads(g_bytes)
+
+def _algo_task(args):
+    algo, scenario = args
+    return BenchmarkRunner._run_algorithm_on_scenario(algo, _worker_G, scenario)
+
+
+def _leg_task(args):
+    algo, src, dst, leg_name = args
+    return algo.safe_run(_worker_G, src, dst, leg_name)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -615,11 +849,10 @@ def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
         ChristofidesAlgorithm,
-        celapceluporeo
         SandyGA, BurhanGA, BimoGA, GeraldGA,
         ParticleSwarmRouting,
         EXAMPLE_SCENARIOS,
-        GeraldSimulatedAnnealing, AntColonyRouting, main
+        GeraldSimulatedAnnealing, AntColonyRouting
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -682,7 +915,7 @@ def run_platform(cfg):
     runner = BenchmarkRunner(registry, log_dir=cfg.LOG_DIR)
     for s in scenarios:
         runner.add_scenario(s)
-    df      = runner.run(G)
+    df      = runner.run(G, parallel_legs=getattr(cfg, "PARALLEL_LEGS", False))
     summary = runner.summary(df)
 
     df.to_csv(cfg.DATA_DIR / "comparison_results.csv", index=False)

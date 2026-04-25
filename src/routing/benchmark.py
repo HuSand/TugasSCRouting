@@ -615,7 +615,11 @@ def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
         ChristofidesAlgorithm,
-        SandyGA, BurhanGA, BimoGA, GeraldGA, GeraldSimulatedAnnealing, AntColonyRouting,
+        celapceluporeo
+        SandyGA, BurhanGA, BimoGA, GeraldGA,
+        ParticleSwarmRouting,
+        EXAMPLE_SCENARIOS,
+        GeraldSimulatedAnnealing, AntColonyRouting, main
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -647,15 +651,16 @@ def run_platform(cfg):
 
     # ── Register algorithms ──────────────────────────────────
     registry = AlgorithmRegistry()
-    registry.register(DijkstraTime())
-    registry.register(DijkstraDistance())
-    registry.register(AStarTime())
-    registry.register(AStarDistance())
-    registry.register(ChristofidesAlgorithm())
-    registry.register(SandyGA())
-    registry.register(BurhanGA())
-    registry.register(BimoGA())
-    registry.register(GeraldGA())
+    registry.register(DijkstraTime())      # baseline: rute tercepat
+    registry.register(DijkstraDistance()) # baseline: rute terpendek
+    registry.register(AStarTime())        # baseline: A* tercepat
+    registry.register(AStarDistance())    # baseline: A* terpendek
+    registry.register(ChristofidesAlgorithm())  # Christofides approximation
+    registry.register(SandyGA())          # Sandy
+    registry.register(BurhanGA())         # Burhan
+    registry.register(BimoGA())           # Bimo
+    registry.register(GeraldGA())         # Gerald
+    registry.register(ParticleSwarmRouting())  # PSO
     registry.register(GeraldSimulatedAnnealing())
     registry.register(AntColonyRouting())
     registry.summary()

@@ -1336,6 +1336,262 @@ _LEGACY_SINGLE_STOP_SCENARIOS = [
 
 
 # ──────────────────────────────────────────────────────────────
+# PSO HELPER FUNCTIONS
+# Used exclusively by ParticleSwarmRouting.
+# ──────────────────────────────────────────────────────────────
+
+def _pso_path_cost(G, path: list) -> float:
+    """Total travel_time along path (lower = better)."""
+    total = 0.0
+    for u, v in zip(path[:-1], path[1:]):
+        data = G.get_edge_data(u, v)
+        if data is None:
+            return float("inf")
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        total += float(best.get("travel_time", 9999))
+    return total
+
+
+def _pso_random_path(G, source: int, target: int, rng: random.Random):
+    """
+    Generate one path using Dijkstra with random noise on edge weights.
+    Different RNG states → different paths → diverse initial swarm.
+    """
+    def noisy_weight(u, v, data):
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        t = float(best.get("travel_time", 9999))
+        return t * rng.uniform(0.5, 1.8)
+
+    try:
+        return nx.shortest_path(G, source, target, weight=noisy_weight)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return None
+
+
+def _pso_repair_path(G, partial_nodes: list):
+    """
+    Repair a potentially disconnected sequence of nodes into a valid path
+    by connecting consecutive nodes with shortest_path segments.
+    Returns None if any segment is unreachable.
+    """
+    if len(partial_nodes) < 2:
+        return partial_nodes if partial_nodes else None
+
+    # Deduplicate consecutive identical nodes
+    cleaned = [partial_nodes[0]]
+    for n in partial_nodes[1:]:
+        if n != cleaned[-1]:
+            cleaned.append(n)
+    if len(cleaned) < 2:
+        return cleaned
+
+    full_path = []
+    for u, v in zip(cleaned[:-1], cleaned[1:]):
+        try:
+            seg = nx.shortest_path(G, u, v, weight="travel_time")
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return None
+        if not full_path:
+            full_path.extend(seg)
+        else:
+            full_path.extend(seg[1:])    # avoid duplicating junction node
+
+    return full_path if full_path else None
+
+
+def _pso_mix_paths(G, current: list, personal_best: list, global_best: list,
+                   inertia_w: float, cognitive_w: float, social_w: float,
+                   rng: random.Random):
+    """
+    Discrete PSO velocity update via path segment mixing.
+
+    Strategy:
+      1. Keep a random middle segment from current path      (inertia)
+      2. Splice in a segment from personal_best              (cognitive)
+      3. Splice in a segment from global_best                (social)
+      4. Repair the assembled waypoints into a valid path
+
+    The probability of each splice is governed by the corresponding weight.
+    """
+    source, target = current[0], current[-1]
+
+    # Collect waypoints — always start from source
+    waypoints = [source]
+
+    # --- inertia: keep some nodes from current path ---
+    if len(current) > 2 and rng.random() < inertia_w:
+        n_keep = max(1, int(len(current) * rng.uniform(0.2, 0.5)))
+        start_idx = rng.randint(1, max(1, len(current) - n_keep - 1))
+        waypoints.extend(current[start_idx:start_idx + n_keep])
+
+    # --- cognitive: pull toward personal best ---
+    if len(personal_best) > 2 and rng.random() < cognitive_w:
+        n_take = max(1, int(len(personal_best) * rng.uniform(0.15, 0.4)))
+        start_idx = rng.randint(1, max(1, len(personal_best) - n_take - 1))
+        waypoints.extend(personal_best[start_idx:start_idx + n_take])
+
+    # --- social: pull toward global best ---
+    if len(global_best) > 2 and rng.random() < social_w:
+        n_take = max(1, int(len(global_best) * rng.uniform(0.15, 0.4)))
+        start_idx = rng.randint(1, max(1, len(global_best) - n_take - 1))
+        waypoints.extend(global_best[start_idx:start_idx + n_take])
+
+    # Always end at target
+    waypoints.append(target)
+
+    # Deduplicate consecutive identical nodes
+    cleaned = [waypoints[0]]
+    for n in waypoints[1:]:
+        if n != cleaned[-1]:
+            cleaned.append(n)
+
+    repaired = _pso_repair_path(G, cleaned)
+    return repaired  # may be None if repair fails
+
+
+def _pso_mutate(G, path: list, rng: random.Random) -> list:
+    """
+    Mutate a path by re-routing a random sub-segment via shortest_path.
+    Introduces diversity to avoid premature convergence.
+    """
+    if len(path) < 3:
+        return path
+    i = rng.randint(0, len(path) - 2)
+    j = rng.randint(i + 1, min(i + max(len(path) // 4, 2), len(path) - 1))
+    try:
+        # Re-route sub-segment with noisy weights for variety
+        def noisy_weight(u, v, data):
+            best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+            t = float(best.get("travel_time", 9999))
+            return t * rng.uniform(0.6, 1.6)
+        seg = nx.shortest_path(G, path[i], path[j], weight=noisy_weight)
+        return path[:i] + seg + path[j + 1:]
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return path
+
+
+# ──────────────────────────────────────────────────────────────
+# PARTICLE SWARM OPTIMIZATION
+# Discrete path-based PSO for network routing.
+# Each particle = one candidate path from source → target.
+# Fitness = total travel_time.
+# ──────────────────────────────────────────────────────────────
+
+class ParticleSwarmRouting(BaseRoutingAlgorithm):
+    """
+    Particle Swarm Optimization — routing based on swarm candidate paths.
+
+    Approach (discrete / path-based):
+    - Each particle represents one candidate path from source to target.
+    - Initial swarm generated via shortest path with randomised edge weights.
+    - Fitness = total travel_time (lower is better).
+    - Personal best = best path ever found by each particle.
+    - Global best   = best path found by entire swarm.
+    - Update step: mix segments from current path, personal best, and
+      global best, then repair disconnected segments.
+    - Random mutation prevents stagnation.
+    """
+    name        = "particle_swarm"
+    description = "Particle Swarm Optimization — routing based on swarm candidate paths"
+
+    # ── PSO parameters ────────────────────────────────────────
+    N_PARTICLES      = 40
+    N_ITERATIONS     = 80
+    INERTIA_WEIGHT   = 0.5
+    COGNITIVE_WEIGHT = 1.2
+    SOCIAL_WEIGHT    = 1.4
+    MUTATION_RATE    = 0.25
+    RANDOM_SEED      = 42
+    # ──────────────────────────────────────────────────────────
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        t0  = time.perf_counter()
+        rng = random.Random(self.RANDOM_SEED)
+
+        # ── 1. initialise swarm ───────────────────────────────
+        particles      = []   # current path per particle
+        personal_bests = []   # best-ever path per particle
+        personal_costs = []   # cost of personal best
+
+        for _ in range(self.N_PARTICLES):
+            p = _pso_random_path(G, source_node, target_node, rng)
+            if p:
+                cost = _pso_path_cost(G, p)
+                particles.append(p)
+                personal_bests.append(p[:])
+                personal_costs.append(cost)
+
+        # Fallback: if swarm is empty, try deterministic shortest path
+        if not particles:
+            try:
+                route = nx.shortest_path(G, source_node, target_node,
+                                         weight="travel_time")
+            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+                ms = (time.perf_counter() - t0) * 1000
+                return RouteResult.failure(self.name, scenario_name,
+                                           source_node, target_node, str(e), ms)
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.build(G, self.name, scenario_name,
+                                     source_node, target_node, route, ms,
+                                     {"strategy": "fallback_dijkstra"})
+
+        # Global best
+        global_best_idx  = min(range(len(particles)), key=lambda i: personal_costs[i])
+        global_best_path = personal_bests[global_best_idx][:]
+        global_best_cost = personal_costs[global_best_idx]
+
+        # ── 2. iterate ────────────────────────────────────────
+        for iteration in range(self.N_ITERATIONS):
+            for i in range(len(particles)):
+                # --- update particle position via path mixing ---
+                new_path = _pso_mix_paths(
+                    G, particles[i], personal_bests[i], global_best_path,
+                    self.INERTIA_WEIGHT, self.COGNITIVE_WEIGHT, self.SOCIAL_WEIGHT,
+                    rng,
+                )
+
+                # If mixing failed, keep as-is
+                if new_path is None:
+                    new_path = particles[i]
+
+                # --- random mutation ---
+                if rng.random() < self.MUTATION_RATE:
+                    new_path = _pso_mutate(G, new_path, rng)
+
+                # --- evaluate fitness ---
+                new_cost = _pso_path_cost(G, new_path)
+
+                # Update particle position
+                particles[i] = new_path
+
+                # Update personal best
+                if new_cost < personal_costs[i]:
+                    personal_bests[i] = new_path[:]
+                    personal_costs[i] = new_cost
+
+                    # Update global best
+                    if new_cost < global_best_cost:
+                        global_best_path = new_path[:]
+                        global_best_cost = new_cost
+
+        # ── 3. return best path found ─────────────────────────
+        ms = (time.perf_counter() - t0) * 1000
+        metadata = {
+            "n_particles":     self.N_PARTICLES,
+            "n_iterations":    self.N_ITERATIONS,
+            "inertia_weight":  self.INERTIA_WEIGHT,
+            "cognitive_weight": self.COGNITIVE_WEIGHT,
+            "social_weight":   self.SOCIAL_WEIGHT,
+            "mutation_rate":   self.MUTATION_RATE,
+            "random_seed":     self.RANDOM_SEED,
+            "strategy":        "discrete_path_pso",
+        }
+        return RouteResult.build(G, self.name, scenario_name,
+                                 source_node, target_node,
+                                 global_best_path, ms, metadata)
+
+
+# ──────────────────────────────────────────────────────────────
 # SKELETON — copy this to add a new algorithm
 # ──────────────────────────────────────────────────────────────
 #

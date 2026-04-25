@@ -243,7 +243,7 @@ class BenchmarkRunner:
                     target_node=scenario.target_node,
                 )
 
-        if len(nodes) <= 2:
+        if len(nodes) <= 2 and not scenario.round_trip:
             return algo.safe_run(G, scenario.source_node,
                                  scenario.target_node, scenario.name)
 
@@ -294,9 +294,28 @@ class BenchmarkRunner:
             else:
                 full_route.extend(result.route[1:])
 
+        # ── Return leg (round trip) ──────────────────────────────
+        if scenario.round_trip and full_route:
+            ret_name = f"{scenario.name}_return"
+            ret = algo.safe_run(G, nodes[-1], nodes[0], ret_name)
+            leg_results.append(ret)
+            leg_rows.append({
+                "leg": len(nodes),
+                "from": labels[-1] if labels else str(nodes[-1]),
+                "to":   labels[0]  if labels else str(nodes[0]),
+                "found": ret.found,
+                "travel_time_s":  ret.total_time_s    if ret.found else None,
+                "distance_m":     ret.total_distance_m if ret.found else None,
+                "computation_ms": ret.computation_ms,
+                "error":          ret.error,
+            })
+            if ret.found:
+                full_route.extend(ret.route[1:])
+
         elapsed = (time.perf_counter() - t0) * 1000
         metadata = {
             "multi_stop": True,
+            "round_trip": scenario.round_trip,
             "stop_count": len(nodes),
             "stops": labels,
             "visit_order_nodes": nodes,
@@ -427,53 +446,165 @@ class BenchmarkRunner:
 
 
 # ──────────────────────────────────────────────────────────────
-# Scenario builder
+# Category-based scenario builder (two focused scenarios)
 # ──────────────────────────────────────────────────────────────
 
-def build_scenarios(G: nx.MultiDiGraph,
-                    fac: gpd.GeoDataFrame,
-                    n: int = 5) -> List[Scenario]:
-    """Auto-generate diverse scenarios from the facility data."""
+def build_category_scenarios(
+    G: nx.MultiDiGraph,
+    fac: gpd.GeoDataFrame,
+    max_emergency: int = 50,
+) -> List[Scenario]:
+    """
+    Build two focused scenarios from real facility data:
 
-    def make(name, desc, src, dst):
+    1. emergency_patrol_circuit
+       Seluruh pos polisi + pemadam kebakaran (maks 50 titik unik).
+       Insight: konektivitas jaringan layanan darurat, waktu respons
+       antar kecamatan, dan gap coverage di wilayah Surabaya.
+
+    2. terminal_circuit
+       Seluruh terminal bus + terminal feri + SPBU (maks tersedia).
+       Insight: aksesibilitas terminal transportasi publik, waktu
+       sirkuit inspeksi terminal, dan bottleneck koneksi antar hub.
+
+    Kedua skenario bersifat sirkular (round_trip=True). Urutan titik
+    ditentukan dengan heuristik nearest-neighbour geografis sehingga
+    rute membentuk loop yang masuk akal secara spasial.
+    """
+
+    def _dedup(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Satu fasilitas per nearest_node; prioritaskan yang punya nama."""
+        df = df.copy()
+        df["_named"] = df["name"].notna() & (df["name"].str.strip() != "")
+        df = df.sort_values("_named", ascending=False)
+        return (df.drop_duplicates(subset="nearest_node")
+                  .drop(columns="_named")
+                  .reset_index(drop=True))
+
+    def _diverse_subset(df: gpd.GeoDataFrame, n: int) -> gpd.GeoDataFrame:
+        """
+        Greedy farthest-point sampling: pilih n titik yang paling
+        tersebar secara geografis, memastikan coverage seluruh kota.
+        """
+        if len(df) <= n:
+            return df
+        lats = df["lat"].values
+        lons = df["lon"].values
+        clat, clon = lats.mean(), lons.mean()
+        selected = [int(np.argmax((lats - clat) ** 2 + (lons - clon) ** 2))]
+        for _ in range(n - 1):
+            min_d = np.full(len(df), np.inf)
+            for s in selected:
+                d = (lats - lats[s]) ** 2 + (lons - lons[s]) ** 2
+                min_d = np.minimum(min_d, d)
+            min_d[selected] = -1.0
+            selected.append(int(np.argmax(min_d)))
+        return df.iloc[sorted(selected)].reset_index(drop=True)
+
+    def _nn_order(df: gpd.GeoDataFrame, start_node: int = None) -> gpd.GeoDataFrame:
+        """
+        Urutkan titik-titik dengan nearest-neighbour tour starting dari
+        start_node, membentuk rute sirkular yang geografis koheren.
+        """
+        df = df.reset_index(drop=True)
+        n = len(df)
+        if n <= 2:
+            return df
+        lats = df["lat"].values
+        lons = df["lon"].values
+        if start_node is not None and start_node in df["nearest_node"].values:
+            start_idx = int(df.index[df["nearest_node"] == start_node][0])
+        else:
+            start_idx = int(np.argmin(lons))   # mulai dari ujung barat
+        visited = [False] * n
+        order = [start_idx]
+        visited[start_idx] = True
+        for _ in range(n - 1):
+            cur = order[-1]
+            best_d, best_j = np.inf, -1
+            for j in range(n):
+                if not visited[j]:
+                    d = (lats[cur] - lats[j]) ** 2 + (lons[cur] - lons[j]) ** 2
+                    if d < best_d:
+                        best_d, best_j = d, j
+            order.append(best_j)
+            visited[best_j] = True
+        return df.iloc[order].reset_index(drop=True)
+
+    def _make_scenario(df: gpd.GeoDataFrame, name: str, description: str) -> Scenario:
+        nodes  = df["nearest_node"].astype(int).tolist()
+        labels = df["name"].where(df["name"].notna() & (df["name"].str.strip() != ""),
+                                   df["facility_type"]).tolist()
+        coords = list(zip(df["lat"].astype(float), df["lon"].astype(float)))
         return Scenario(
-            name=name, description=desc,
-            source_node=int(src["nearest_node"]),
-            target_node=int(dst["nearest_node"]),
-            source_label=str(src.get("name") or src["facility_type"]),
-            target_label=str(dst.get("name") or dst["facility_type"]),
-            source_coords=(float(src["lat"]), float(src["lon"])),
-            target_coords=(float(dst["lat"]), float(dst["lon"])),
+            name=name,
+            description=description,
+            source_node=nodes[0],
+            target_node=nodes[-1],
+            source_label=labels[0],
+            target_label=labels[-1],
+            source_coords=coords[0],
+            target_coords=coords[-1],
+            route_nodes=nodes,
+            route_labels=labels,
+            route_coords=coords,
+            round_trip=True,
         )
 
-    hosp   = fac[fac["facility_type"] == "hospital"].dropna(subset=["nearest_node"])
-    school = fac[fac["facility_type"] == "school"].dropna(subset=["nearest_node"])
-    police = fac[fac["facility_type"] == "police"].dropna(subset=["nearest_node"])
-    p1     = fac[fac["priority"] == 1].dropna(subset=["nearest_node"])
+    fac = fac.dropna(subset=["nearest_node"]).copy()
+    fac["nearest_node"] = fac["nearest_node"].astype(int)
 
-    scenarios = []
+    # ── 1. EMERGENCY PATROL CIRCUIT ──────────────────────────────
+    # Polisi + pemadam kebakaran → maks 50 titik unik
+    # Titik awal: Kepolisian Daerah Jawa Timur (Polda Jatim) — markas utama
+    POLDA_NODE = 9156956728
 
-    if len(hosp) >= 1 and len(school) >= 1:
-        scenarios.append(make("hosp_to_school",
-                               "Hospital -> school (monitoring patrol)",
-                               hosp.iloc[0], school.iloc[0]))
-    if len(hosp) >= 2:
-        scenarios.append(make("hosp_to_hosp",
-                               "Hospital A -> Hospital B (inter-facility)",
-                               hosp.iloc[0], hosp.iloc[1]))
-    if len(police) >= 1 and len(hosp) >= 1:
-        scenarios.append(make("police_to_hosp",
-                               "Police -> hospital (emergency route)",
-                               police.iloc[0], hosp.iloc[0]))
-    if len(p1) >= 4:
-        scenarios.append(make("priority_cross_a",
-                               "High-priority cross-city A",
-                               p1.iloc[0], p1.iloc[-1]))
-        scenarios.append(make("priority_cross_b",
-                               "High-priority cross-city B",
-                               p1.iloc[1], p1.iloc[-2]))
+    emg = fac[fac["category"] == "emergency"].copy()
+    emg = _dedup(emg)
+    log.info(f"Emergency: {len(emg)} unique nodes after dedup (raw={len(fac[fac['category']=='emergency'])})")
+    if len(emg) > max_emergency:
+        emg = _diverse_subset(emg, max_emergency)
+        log.info(f"Emergency: reduced to {len(emg)} via farthest-point geographic sampling")
+    emg = _nn_order(emg, start_node=POLDA_NODE)
+    n_emg = len(emg)
 
-    return scenarios[:n]
+    emergency_scenario = _make_scenario(
+        emg,
+        name="emergency_patrol_circuit",
+        description=(
+            f"{n_emg}-stop sirkuit patroli darurat (polisi + pemadam kebakaran) — "
+            "coverage seluruh Surabaya. "
+            "Insight: konektivitas jaringan darurat, waktu tempuh antar pos, "
+            "dan identifikasi area dengan gap coverage layanan darurat."
+        ),
+    )
+
+    # ── 2. TERMINAL CIRCUIT ───────────────────────────────────────
+    # Terminal bus + terminal feri + SPBU → semua titik unik (< 50)
+    # Titik awal: Terminal Intermoda Joyoboyo — hub utama kota
+    JOYOBOYO_NODE = 8148987377
+
+    trans = fac[fac["category"] == "transport"].copy()
+    trans = _dedup(trans)
+    log.info(f"Terminal: {len(trans)} unique nodes after dedup (raw={len(fac[fac['category']=='transport'])})")
+    trans = _nn_order(trans, start_node=JOYOBOYO_NODE)
+    n_trans = len(trans)
+
+    terminal_scenario = _make_scenario(
+        trans,
+        name="terminal_circuit",
+        description=(
+            f"{n_trans}-stop sirkuit terminal transportasi (terminal bus + feri + SPBU) — "
+            "seluruh jaringan transportasi publik Surabaya. "
+            "Insight: aksesibilitas terminal, waktu sirkuit inspeksi, "
+            "dan bottleneck koneksi antar hub transportasi."
+        ),
+    )
+
+    log.info(f"Scenarios built: [{emergency_scenario.name}] {n_emg} stops | "
+             f"[{terminal_scenario.name}] {n_trans} stops")
+
+    return [emergency_scenario, terminal_scenario]
 
 
 # ──────────────────────────────────────────────────────────────
@@ -484,9 +615,11 @@ def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
         ChristofidesAlgorithm,
+        celapceluporeo
         SandyGA, BurhanGA, BimoGA, GeraldGA,
         ParticleSwarmRouting,
         EXAMPLE_SCENARIOS,
+        GeraldSimulatedAnnealing, AntColonyRouting, main
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -517,7 +650,6 @@ def run_platform(cfg):
     log.info(f"Graph: {G.number_of_nodes()} nodes  |  Facilities: {len(fac)}")
 
     # ── Register algorithms ──────────────────────────────────
-    # Add or remove algorithms here.
     registry = AlgorithmRegistry()
     registry.register(DijkstraTime())      # baseline: rute tercepat
     registry.register(DijkstraDistance()) # baseline: rute terpendek
@@ -529,19 +661,22 @@ def run_platform(cfg):
     registry.register(BimoGA())           # Bimo
     registry.register(GeraldGA())         # Gerald
     registry.register(ParticleSwarmRouting())  # PSO
+    registry.register(GeraldSimulatedAnnealing())
+    registry.register(AntColonyRouting())
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────
-    # Gunakan skenario konkret dari EXAMPLE_SCENARIOS (fasilitas Surabaya nyata).
-    # Kalau mau pakai auto-generate, ganti baris di bawah dengan:
-    #   scenarios = build_scenarios(G, fac, n=cfg.N_SCENARIOS)
+    # Two focused category-based circular scenarios:
+    #   1. emergency_patrol_circuit  — police + fire stations (up to 50 stops)
+    #   2. terminal_circuit          — bus/ferry terminals + fuel (all available)
     log.info("\nBuilding benchmark scenarios...")
-    scenarios = EXAMPLE_SCENARIOS[:cfg.N_SCENARIOS]
+    scenarios = build_category_scenarios(G, fac, max_emergency=50)
     if not scenarios:
         log.error("Could not build scenarios — check that extraction ran successfully.")
         return
     for s in scenarios:
-        log.info(f"  [{s.name}]  {s.source_label} -> {s.target_label}")
+        log.info(f"  [{s.name}]  {len(s.node_sequence)} stops | "
+                 f"start={s.source_label} | round_trip={s.round_trip}")
 
     # ── Run benchmark ────────────────────────────────────────
     runner = BenchmarkRunner(registry, log_dir=cfg.LOG_DIR)

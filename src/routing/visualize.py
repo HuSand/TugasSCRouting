@@ -20,7 +20,21 @@ log = logging.getLogger(__name__)
 ROUTE_COLORS = [
     "#E63946", "#2196F3", "#4CAF50", "#FF9800",
     "#9C27B0", "#00BCD4", "#FF5722", "#607D8B",
+    "#D81B60",
 ]
+
+ROUTE_COLOR_BY_ALGO = {
+    "dijkstra_time": "#9C27B0",
+    "dijkstra_distance": "#795548",
+    "astar_time": "#00BCD4",
+    "astar_distance": "#607D8B",
+    "christofides": "#2ECC71",
+    "sandy_ga": "#E63946",
+    "burhan_ga": "#2196F3",
+    "bimo_ga": "#4CAF50",
+    "gerald_ga": "#FF9800",
+    "gerald_sa": "#D81B60",
+}
 
 
 def _route_street_names(G, route: list) -> list:
@@ -68,7 +82,10 @@ class ResultVisualiser:
         for i, r in enumerate(results):
             if not r.found or len(r.route) < 2:
                 continue
-            color = ROUTE_COLORS[i % len(ROUTE_COLORS)]
+            color = ROUTE_COLOR_BY_ALGO.get(
+                r.algorithm_name,
+                ROUTE_COLORS[i % len(ROUTE_COLORS)],
+            )
 
             # Ambil koordinat (lat, lon) tiap node dalam route
             coords = []
@@ -104,24 +121,42 @@ class ResultVisualiser:
             drawn.append((i, r, color))
 
         # Marker awal, waypoint, dan tujuan
+        n_stops = len(scenario.label_sequence)
         for idx, (label, coords) in enumerate(zip(scenario.label_sequence,
                                                   scenario.coord_sequence), start=1):
+            lbl_lower = label.lower()
             if scenario.optimize_order:
                 title = f"DEST {idx}"
-                icon = folium.Icon(color="gray", icon="map-marker", prefix="glyphicon")
+                icon  = folium.Icon(color="gray", icon="map-marker", prefix="glyphicon")
             elif idx == 1:
-                title = "START"
-                icon = folium.Icon(color="green", icon="play", prefix="glyphicon")
-            elif idx == len(scenario.label_sequence):
+                title = "BASE / START" if scenario.round_trip else "START"
+                icon  = folium.Icon(color="green", icon="home", prefix="glyphicon")
+            elif idx == n_stops and not scenario.round_trip:
                 title = "END"
-                icon = folium.Icon(color="red", icon="stop", prefix="glyphicon")
+                icon  = folium.Icon(color="red", icon="stop", prefix="glyphicon")
             else:
                 title = f"STOP {idx}"
-                icon = folium.Icon(color="blue", icon="flag", prefix="glyphicon")
+                if any(k in lbl_lower for k in ("polisi", "polsek", "polres", "polda",
+                                                  "brimob", "samsat", "polantas",
+                                                  "satlantas", "satpas")):
+                    stop_color = "red"
+                elif any(k in lbl_lower for k in ("kebakaran", "pemadam")):
+                    stop_color = "orange"
+                elif any(k in lbl_lower for k in ("terminal", "stasiun", "pelabuhan")):
+                    stop_color = "blue"
+                elif any(k in lbl_lower for k in ("spbu", "pertamina", "shell", "bp")):
+                    stop_color = "gray"
+                else:
+                    stop_color = "blue"
+                icon = folium.Icon(color=stop_color, icon="flag", prefix="glyphicon")
+
+            popup_body = f"<b>{title}</b><br>{label}"
+            if idx == 1 and scenario.round_trip:
+                popup_body += "<br><i>(route returns here)</i>"
 
             folium.Marker(
                 list(coords),
-                popup=folium.Popup(f"<b>{title}</b><br>{label}", max_width=220),
+                popup=folium.Popup(popup_body, max_width=240),
                 tooltip=f"{title}: {label}",
                 icon=icon,
             ).add_to(m)
@@ -134,6 +169,8 @@ class ResultVisualiser:
 
         # Legend
         route_label = " -> ".join(scenario.label_sequence)
+        if scenario.round_trip:
+            route_label += " -> (return to start)"
         if scenario.optimize_order:
             route_label = "unordered destinations; each algorithm chooses visit order"
         legend = (
@@ -207,7 +244,7 @@ class ResultVisualiser:
             offset = (i - len(algorithms) / 2 + 0.5) * width
             ax.bar(x + offset, times, width,
                    label=algo,
-                   color=ROUTE_COLORS[i % len(ROUTE_COLORS)],
+                   color=ROUTE_COLOR_BY_ALGO.get(algo, ROUTE_COLORS[i % len(ROUTE_COLORS)]),
                    alpha=0.85)
         ax.set_xticks(x)
         ax.set_xticklabels(scenarios, rotation=20, ha="right")
@@ -222,7 +259,10 @@ class ResultVisualiser:
         avg_cpu = [ok[ok["algorithm"] == a]["computation_ms"].mean() for a in algorithms]
         bars = ax2.barh(
             list(algorithms), avg_cpu,
-            color=[ROUTE_COLORS[i % len(ROUTE_COLORS)] for i in range(len(algorithms))],
+            color=[
+                ROUTE_COLOR_BY_ALGO.get(a, ROUTE_COLORS[i % len(ROUTE_COLORS)])
+                for i, a in enumerate(algorithms)
+            ],
             alpha=0.85,
         )
         for bar in bars:

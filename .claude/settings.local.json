@@ -4,7 +4,12 @@
       "Bash(venv/Scripts/python -c ':*)",
       "Bash(ls venv/)",
       "Bash(conda run -n surabaya-routing python -c ':*)",
-      "Bash(conda run:*)"
+      "Bash(conda run:*)",
+      "Bash(python -c ':*)",
+      "Bash(python -)",
+      "Bash(python -m py_compile src/routing/base.py src/routing/benchmark.py src/routing/algorithms.py src/routing/evolve_viz.py src/routing/visualize.py)",
+      "Bash(python -m py_compile src/routing/algorithms.py)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/routing/evolve_viz.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
     ]
   }
 }

@@ -402,10 +402,7 @@ class BenchmarkRunner:
 
         for algo in algos:
             # Algorithms with _route_multi_stop handle the full tour themselves —
-            # skip leg decomposition and run them in the main process instead.
-            if scenario.is_multi_stop and hasattr(algo, "_route_multi_stop"):
-                algo_meta[algo.name] = {"mode": "christofides"}
-                continue
+            # skip leg decomposition and run them in the main process instead
 
             nodes  = list(scenario.node_sequence)
             labels = list(scenario.label_sequence)
@@ -473,15 +470,6 @@ class BenchmarkRunner:
         # ── 3. Handle special-case algos in main process ──────────────────
         for algo in algos:
             meta = algo_meta.get(algo.name, {"mode": "simple"})
-
-            if meta["mode"] == "christofides":
-                if hasattr(algo, "_route_multi_stop"):
-                    results_by_name[algo.name] = algo._route_multi_stop(
-                        G, scenario.node_sequence, scenario.name,
-                        source_node=scenario.source_node,
-                        target_node=scenario.target_node,
-                    )
-                continue
 
             if meta["mode"] == "simple":
                 results_by_name[algo.name] = algo.safe_run(
@@ -850,7 +838,6 @@ def build_category_scenarios(
 def run_platform(cfg):
     from src.routing.algorithms import (
         GeneticAlgorithm,
-        ChristofidesAlgorithm,
         AntColonyRouting,
         GeraldSimulatedAnnealing,
         ParticleSwarmRouting,
@@ -884,11 +871,10 @@ def run_platform(cfg):
     log.info(f"Graph: {G.number_of_nodes()} nodes  |  Facilities: {len(fac)}")
 
     # ── Register algorithms ──────────────────────────────────
-    # GA and Christofides handle multi-stop tours via _route_multi_stop.
+    # GA handles multi-stop tours via _route_multi_stop (TSP-GA, evolves visit order).
     # ACO, SA, and PSO route leg-by-leg using the benchmark's leg decomposition.
     registry = AlgorithmRegistry()
     registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
-    registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
     registry.register(AntColonyRouting())         # pheromone-based path search
     registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
     registry.register(ParticleSwarmRouting())     # swarm path optimisation

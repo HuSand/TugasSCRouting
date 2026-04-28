@@ -672,7 +672,7 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
 
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 4: ANT COLONY OPTIMIZATION (ACO) — renumbered after Christofides removal
+# SECTION 4: ANT COLONY OPTIMIZATION (ACO)
 
 # ══════════════════════════════════════════════════════════════════
 # SECTION 5: ANT COLONY OPTIMIZATION (ACO)

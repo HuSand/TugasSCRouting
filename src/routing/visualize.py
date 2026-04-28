@@ -24,16 +24,11 @@ ROUTE_COLORS = [
 ]
 
 ROUTE_COLOR_BY_ALGO = {
-    "dijkstra_time": "#9C27B0",
-    "dijkstra_distance": "#795548",
-    "astar_time": "#00BCD4",
-    "astar_distance": "#607D8B",
-    "christofides": "#2ECC71",
-    "sandy_ga": "#E63946",
-    "burhan_ga": "#2196F3",
-    "bimo_ga": "#4CAF50",
-    "gerald_ga": "#FF9800",
-    "gerald_sa": "#D81B60",
+    "ga":             "#E63946",
+    "christofides":   "#2ECC71",
+    "aco_routing":    "#FF9800",
+    "gerald_sa":      "#D81B60",
+    "particle_swarm": "#2196F3",
 }
 
 
@@ -120,22 +115,46 @@ class ResultVisualiser:
             ).add_to(m)
             drawn.append((i, r, color))
 
-        # Marker awal, waypoint, dan tujuan
+        # ── Stop markers ──────────────────────────────────────────────────
+        # If any algorithm recorded a visit_order in its metadata, use the
+        # first such order to number the pins — it reflects an algorithm's
+        # actual chosen visit sequence rather than the arbitrary input order.
+        visit_order_nodes = None
+        for r in results:
+            vo = r.metadata.get("visit_order")
+            if vo:
+                visit_order_nodes = vo
+                break
+
+        # Build a node→visit-rank lookup from the chosen order (skip the
+        # closing duplicate in a round-trip tour, e.g. [A,B,C,A] → ranks for A,B,C)
+        node_visit_rank: dict = {}
+        if visit_order_nodes:
+            seen = set()
+            rank = 1
+            for n in visit_order_nodes:
+                if n not in seen:
+                    node_visit_rank[n] = rank
+                    seen.add(n)
+                    rank += 1
+
         n_stops = len(scenario.label_sequence)
         for idx, (label, coords) in enumerate(zip(scenario.label_sequence,
                                                   scenario.coord_sequence), start=1):
-            lbl_lower = label.lower()
-            if scenario.optimize_order:
-                title = f"DEST {idx}"
-                icon  = folium.Icon(color="gray", icon="map-marker", prefix="glyphicon")
-            elif idx == 1:
+            lbl_lower  = label.lower()
+            node       = scenario.node_sequence[idx - 1]
+            visit_rank = node_visit_rank.get(node, idx)   # fallback to input order
+
+            if idx == 1:
                 title = "BASE / START" if scenario.round_trip else "START"
                 icon  = folium.Icon(color="green", icon="home", prefix="glyphicon")
             elif idx == n_stops and not scenario.round_trip:
                 title = "END"
                 icon  = folium.Icon(color="red", icon="stop", prefix="glyphicon")
             else:
-                title = f"STOP {idx}"
+                # Show the actual GA visit rank next to the stop number
+                rank_note = f" (visit #{visit_rank})" if visit_order_nodes else ""
+                title = f"STOP {idx}{rank_note}"
                 if any(k in lbl_lower for k in ("polisi", "polsek", "polres", "polda",
                                                   "brimob", "samsat", "polantas",
                                                   "satlantas", "satpas")):
@@ -153,6 +172,8 @@ class ResultVisualiser:
             popup_body = f"<b>{title}</b><br>{label}"
             if idx == 1 and scenario.round_trip:
                 popup_body += "<br><i>(route returns here)</i>"
+            if visit_order_nodes and idx > 1:
+                popup_body += f"<br><small>GA visit order: #{visit_rank}</small>"
 
             folium.Marker(
                 list(coords),
@@ -168,11 +189,18 @@ class ResultVisualiser:
                 pass
 
         # Legend
+        # Algorithms with _route_multi_stop (GA, Christofides) choose their own
+        # visit order — flag this in the legend so the viewer knows the pins
+        # are destination nodes, not a fixed route.
+        any_self_ordered = any(
+            hasattr(type(r), "_route_multi_stop") or "visit_order" in r.metadata
+            for r in results if r.found
+        )
         route_label = " -> ".join(scenario.label_sequence)
         if scenario.round_trip:
             route_label += " -> (return to start)"
-        if scenario.optimize_order:
-            route_label = "unordered destinations; each algorithm chooses visit order"
+        if any_self_ordered:
+            route_label = "Destinations (pins); each algorithm chooses its own visit order"
         legend = (
             "<div style='position:fixed;bottom:30px;left:30px;z-index:9999;"
             "background:white;padding:10px 14px;border-radius:6px;"

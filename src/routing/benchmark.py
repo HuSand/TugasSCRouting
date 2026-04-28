@@ -234,17 +234,17 @@ class BenchmarkRunner:
         labels = scenario.label_sequence
         coords = scenario.coord_sequence
 
-        # Christofides is only meaningful for multi-stop routing.
-        # Route it once as a tour instead of splitting into per-leg shortest paths.
-        if getattr(algo, "name", "") == "christofides" and scenario.is_multi_stop:
-            if hasattr(algo, "_route_multi_stop"):
-                return algo._route_multi_stop(
-                    G,
-                    nodes,
-                    scenario.name,
-                    source_node=scenario.source_node,
-                    target_node=scenario.target_node,
-                )
+        # Any algorithm that implements _route_multi_stop handles the full
+        # multi-stop tour itself — it decides visit order and returns to start.
+        # The benchmark runner does NOT pre-order stops for these algorithms.
+        if scenario.is_multi_stop and hasattr(algo, "_route_multi_stop"):
+            return algo._route_multi_stop(
+                G,
+                nodes,
+                scenario.name,
+                source_node=scenario.source_node,
+                target_node=scenario.target_node,
+            )
 
         if len(nodes) <= 2 and not scenario.round_trip:
             return algo.safe_run(G, scenario.source_node,
@@ -401,7 +401,9 @@ class BenchmarkRunner:
         flat_tasks = []
 
         for algo in algos:
-            if getattr(algo, "name", "") == "christofides" and scenario.is_multi_stop:
+            # Algorithms with _route_multi_stop handle the full tour themselves —
+            # skip leg decomposition and run them in the main process instead.
+            if scenario.is_multi_stop and hasattr(algo, "_route_multi_stop"):
                 algo_meta[algo.name] = {"mode": "christofides"}
                 continue
 
@@ -847,12 +849,11 @@ def build_category_scenarios(
 
 def run_platform(cfg):
     from src.routing.algorithms import (
-        DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
+        GeneticAlgorithm,
         ChristofidesAlgorithm,
-        SandyGA, BurhanGA, BimoGA, GeraldGA,
+        AntColonyRouting,
+        GeraldSimulatedAnnealing,
         ParticleSwarmRouting,
-        EXAMPLE_SCENARIOS,
-        GeraldSimulatedAnnealing, AntColonyRouting
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -883,19 +884,14 @@ def run_platform(cfg):
     log.info(f"Graph: {G.number_of_nodes()} nodes  |  Facilities: {len(fac)}")
 
     # ── Register algorithms ──────────────────────────────────
+    # GA and Christofides handle multi-stop tours via _route_multi_stop.
+    # ACO, SA, and PSO route leg-by-leg using the benchmark's leg decomposition.
     registry = AlgorithmRegistry()
-    registry.register(DijkstraTime())      # baseline: rute tercepat
-    registry.register(DijkstraDistance()) # baseline: rute terpendek
-    registry.register(AStarTime())        # baseline: A* tercepat
-    registry.register(AStarDistance())    # baseline: A* terpendek
-    registry.register(ChristofidesAlgorithm())  # Christofides approximation
-    registry.register(SandyGA())          # Sandy
-    registry.register(BurhanGA())         # Burhan
-    registry.register(BimoGA())           # Bimo
-    registry.register(GeraldGA())         # Gerald
-    registry.register(ParticleSwarmRouting())  # PSO
-    registry.register(GeraldSimulatedAnnealing())
-    registry.register(AntColonyRouting())
+    registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
+    registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
+    registry.register(AntColonyRouting())         # pheromone-based path search
+    registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
+    registry.register(ParticleSwarmRouting())     # swarm path optimisation
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────

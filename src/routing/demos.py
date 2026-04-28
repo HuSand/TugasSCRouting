@@ -20,6 +20,35 @@ import folium
 log = logging.getLogger(__name__)
 
 
+def _route_coords(G, route: list) -> list:
+    """Return Folium-ready (lat, lon) coordinates for a route node list."""
+    coords = []
+    for n in route:
+        node = G.nodes.get(n)
+        if node:
+            coords.append((float(node["y"]), float(node["x"])))
+    return coords
+
+
+def _route_map(G, route: list, color: str = "red",
+               weight: int = 5, opacity: float = 0.75,
+               route_map=None):
+    """
+    Draw a route with Folium without relying on deprecated OSMnx helpers.
+    Newer OSMnx versions removed the old Folium route helper.
+    """
+    coords = _route_coords(G, route)
+    if len(coords) < 2:
+        raise ValueError("Route has fewer than two drawable coordinates")
+    m = route_map or folium.Map(location=coords[0], zoom_start=13,
+                                tiles="cartodbpositron")
+    folium.PolyLine(coords, color=color, weight=weight,
+                    opacity=opacity).add_to(m)
+    if route_map is None:
+        m.fit_bounds(coords, padding=(30, 30))
+    return m
+
+
 # ──────────────────────────────────────────────────────────────
 # Demo 1 — fastest vs shortest path between two facilities
 # ──────────────────────────────────────────────────────────────
@@ -33,25 +62,35 @@ def _demo_path_comparison(G, fac, cfg):
         log.warning("Not enough named hospitals/schools — skipping demo 1.")
         return
 
-    src, dst = hospitals.iloc[0], schools.iloc[0]
-    sn, dn   = int(src["nearest_node"]), int(dst["nearest_node"])
-    log.info(f"  From: {src.get('name','Hospital')} -> {dst.get('name','School')}")
+    chosen = None
+    for _, src in hospitals.iterrows():
+        sn = int(src["nearest_node"])
+        for _, dst in schools.iterrows():
+            dn = int(dst["nearest_node"])
+            try:
+                fast  = nx.shortest_path(G, sn, dn, weight="travel_time")
+                t_sec = nx.shortest_path_length(G, sn, dn, weight="travel_time")
+                short = nx.shortest_path(G, sn, dn, weight="length")
+                d_m   = nx.shortest_path_length(G, sn, dn, weight="length")
+                chosen = (src, dst, fast, t_sec, short, d_m)
+                break
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                continue
+        if chosen:
+            break
 
-    try:
-        fast  = nx.shortest_path(G, sn, dn, weight="travel_time")
-        t_sec = nx.shortest_path_length(G, sn, dn, weight="travel_time")
-        short = nx.shortest_path(G, sn, dn, weight="length")
-        d_m   = nx.shortest_path_length(G, sn, dn, weight="length")
-    except nx.NetworkXNoPath:
-        log.error("No path found between these facilities.")
+    if not chosen:
+        log.error("No valid hospital-school path found — skipping demo 1.")
         return
 
+    src, dst, fast, t_sec, short, d_m = chosen
+    log.info(f"  From: {src.get('name','Hospital')} -> {dst.get('name','School')}")
     log.info(f"  Fastest : {len(fast)} nodes, {t_sec/60:.1f} min")
     log.info(f"  Shortest: {len(short)} nodes, {d_m/1000:.2f} km")
 
-    m = ox.plot_route_folium(G, fast,  color="red",  weight=5, opacity=0.75)
-    ox.plot_route_folium(    G, short, route_map=m,
-                             color="blue", weight=5, opacity=0.75)
+    m = _route_map(G, fast,  color="red",  weight=5, opacity=0.75)
+    _route_map(G, short, route_map=m,
+               color="blue", weight=5, opacity=0.75)
     folium.Marker([src["lat"], src["lon"]],
                   popup=f"FROM: {src.get('name','Hospital')}",
                   icon=folium.Icon(color="green")).add_to(m)
@@ -95,11 +134,15 @@ def _demo_nearest_facility(G, fac, cfg):
         log.error("No reachable hospital found.")
         return
 
-    log.info(f"  Nearest: {best_hosp.get('name','?')}  —  {best_t/60:.1f} min")
+    log.info(f"  Nearest: {best_hosp.get('name','?')}  -  {best_t/60:.1f} min")
 
-    route = nx.shortest_path(G, origin, int(best_hosp["nearest_node"]),
-                              weight="travel_time")
-    m = ox.plot_route_folium(G, route, color="red", weight=5)
+    try:
+        route = nx.shortest_path(G, origin, int(best_hosp["nearest_node"]),
+                                  weight="travel_time")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        log.error("Nearest hospital became unreachable — skipping demo 2 map.")
+        return
+    m = _route_map(G, route, color="red", weight=5)
     folium.Marker([lat, lon],
                   popup="YOUR LOCATION",
                   icon=folium.Icon(color="green", icon="user", prefix="glyphicon")).add_to(m)
@@ -128,9 +171,16 @@ def _demo_coverage(G, fac, cfg):
         cat_fac = fac[fac["category"] == category]
         if cat_fac.empty:
             continue
-        nodes = [int(n) for n in cat_fac["nearest_node"].unique()][:cfg.MAX_FACILITIES_PER_CAT]
+        nodes = [
+            int(n) for n in cat_fac["nearest_node"].unique()
+            if int(n) in G
+        ][:cfg.MAX_FACILITIES_PER_CAT]
+        if not nodes:
+            continue
         times = []
         for src in origins:
+            if src not in G:
+                continue
             best = min(
                 (nx.shortest_path_length(G, src, d, weight="travel_time")
                  for d in nodes
@@ -156,7 +206,7 @@ def _demo_coverage(G, fac, cfg):
 
     if rows:
         out = cfg.DATA_DIR / "demo_coverage_report.txt"
-        with open(out, "w") as f:
+        with open(out, "w", encoding="utf-8") as f:
             f.write("Coverage Report\n" + "="*50 + "\n\n")
             for r in rows:
                 f.write(f"{r['category'].upper()} ({r['facilities']} facilities)\n"
@@ -194,6 +244,15 @@ def run_demos(cfg):
     fac["nearest_node"] = pd.to_numeric(fac["nearest_node"], errors="coerce")
     fac = fac.dropna(subset=["nearest_node"])
     fac["nearest_node"] = fac["nearest_node"].astype(int)
+    before = len(fac)
+    fac = fac[fac["nearest_node"].isin(G.nodes)].copy()
+    dropped = before - len(fac)
+    if dropped:
+        log.warning(
+            f"Dropped {dropped} facilities whose nearest_node is not present "
+            "in road_network.graphml. Re-run 'python main.py extract' if this "
+            "number is unexpectedly high."
+        )
 
     _demo_path_comparison(G, fac, cfg)
     _demo_nearest_facility(G, fac, cfg)

@@ -33,10 +33,18 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 def setup_logging(cfg) -> logging.Logger:
     from datetime import datetime
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
     handlers = [logging.StreamHandler(sys.stdout)]
     if cfg.LOG_TO_FILE:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        handlers.append(logging.FileHandler(cfg.LOG_DIR / f"run_{ts}.log"))
+        handlers.append(logging.FileHandler(
+            cfg.LOG_DIR / f"run_{ts}.log",
+            encoding="utf-8",
+        ))
     logging.basicConfig(
         level=getattr(logging, cfg.LOG_LEVEL),
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -97,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     desc_lines = ["Available commands:"]
     for cmd, (desc, _) in STEPS.items():
         desc_lines.append(f"  {cmd:<10}  {desc}")
-    desc_lines.append(f"  {'all':<10}  Run full pipeline (extract → explore → demo → compare)")
+    desc_lines.append(f"  {'all':<10}  Run full pipeline (extract -> explore -> demo -> compare)")
 
     parser = argparse.ArgumentParser(
         prog="python main.py",

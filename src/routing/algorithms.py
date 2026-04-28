@@ -320,6 +320,138 @@ def _sa_neighbor_path(G, path: list, rng: random.Random) -> list:
 
 
 # ══════════════════════════════════════════════════════════════════
+# MULTI-STOP ORDER HELPERS
+#
+# Shared by models that optimise visit order. The contract is:
+# start is fixed, final destination is fixed, and only intermediate
+# stops may be reordered. Round-trip scenarios end back at start.
+# ══════════════════════════════════════════════════════════════════
+
+def _unique_preserve_order(nodes: list) -> list:
+    seen = set()
+    result = []
+    for node in nodes:
+        if node not in seen:
+            seen.add(node)
+            result.append(node)
+    return result
+
+
+def _split_multi_stop_nodes(nodes: list,
+                            source_node: int = None,
+                            target_node: int = None,
+                            round_trip: bool = False) -> tuple:
+    unique = _unique_preserve_order(nodes)
+    if not unique:
+        return None, None, []
+
+    start = source_node if source_node is not None else unique[0]
+    end = start if round_trip else (
+        target_node if target_node is not None else unique[-1]
+    )
+
+    middle = []
+    for node in unique:
+        if node == start or node == end:
+            continue
+        middle.append(node)
+    return start, end, middle
+
+
+def _pairwise_stop_costs(G, stops: list, weight: str) -> dict:
+    pair_cost = {}
+    for src in stops:
+        try:
+            lengths = nx.single_source_dijkstra_path_length(
+                G, src, weight=weight
+            )
+        except (nx.NodeNotFound, nx.NetworkXError):
+            lengths = {}
+        for dst in stops:
+            if src != dst:
+                pair_cost[(src, dst)] = lengths.get(dst, float("inf"))
+    return pair_cost
+
+
+def _tour_cost(order: list, pair_cost: dict) -> float:
+    return sum(
+        pair_cost.get((src, dst), float("inf"))
+        for src, dst in zip(order[:-1], order[1:])
+    )
+
+
+def _weighted_choice(items: list, weights: list, rng: random.Random):
+    total = sum(weights)
+    if total <= 0 or not math.isfinite(total):
+        return rng.choice(items)
+    pick = rng.random() * total
+    acc = 0.0
+    for item, weight in zip(items, weights):
+        acc += weight
+        if pick <= acc:
+            return item
+    return items[-1]
+
+
+def _expand_stop_tour(G, order: list, weight: str) -> list:
+    full_route = []
+    for src, dst in zip(order[:-1], order[1:]):
+        leg = nx.shortest_path(G, src, dst, weight=weight)
+        if not full_route:
+            full_route.extend(leg)
+        else:
+            full_route.extend(leg[1:])
+    return full_route
+
+
+def _multi_stop_result(algo,
+                       G,
+                       scenario_name: str,
+                       stop_order: list,
+                       elapsed_ms: float,
+                       order_objective: str,
+                       order_score: float,
+                       weight: str,
+                       metadata: dict = None) -> RouteResult:
+    if metadata is None:
+        metadata = {}
+
+    try:
+        full_route = _expand_stop_tour(G, stop_order, weight)
+    except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+        return RouteResult.failure(
+            algo.name,
+            scenario_name,
+            stop_order[0] if stop_order else -1,
+            stop_order[-1] if stop_order else -1,
+            str(e),
+            elapsed_ms,
+        )
+
+    meta = {
+        "multi_stop": True,
+        "round_trip": len(stop_order) > 1 and stop_order[0] == stop_order[-1],
+        "stop_count": len(set(stop_order)),
+        "visit_order": stop_order,
+        "visit_order_nodes": stop_order,
+        "order_objective": order_objective,
+        "order_score": order_score,
+    }
+    meta.update(metadata)
+
+    return RouteResult.build(
+        G,
+        algo.name,
+        scenario_name,
+        stop_order[0],
+        stop_order[-1],
+        full_route,
+        elapsed_ms,
+        meta,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════
 # SECTION 3: GENETIC ALGORITHM
 #
 # A Genetic Algorithm that works at two levels:
@@ -431,7 +563,8 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
 
     def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
                           source_node: int = None,
-                          target_node: int = None) -> RouteResult:
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
         """
         TSP-GA for multi-stop circular routing.
 
@@ -459,18 +592,19 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
         """
         t0 = time.perf_counter()
 
-        # Remove duplicate stops while preserving the original order
-        nodes = list(dict.fromkeys(nodes))
+        start, end, intermediates = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        stop_set = [start] + intermediates
+        if end != start:
+            stop_set.append(end)
+        nodes = _unique_preserve_order(stop_set)
 
-        if len(nodes) < 2:
+        if start is None or len(nodes) < 2:
             ms = (time.perf_counter() - t0) * 1000
             n0 = nodes[0] if nodes else -1
             return RouteResult.failure(self.name, scenario_name, n0, n0,
                                        "Need at least 2 stops for a tour", ms)
-
-        # The first node in the list is the fixed starting (and ending) point
-        start         = nodes[0]
-        intermediates = nodes[1:]   # these are the stops whose order is evolved
 
         # ── Step 1: Precompute pairwise costs (parallel) ──────────────────
         # Run one Dijkstra sweep per stop as source, then extract costs to
@@ -504,11 +638,11 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
         # ── Tour cost helper (used inside the GA loop) ────────────────────
         def tour_cost(perm: list) -> float:
             """
-            Sum of pairwise costs for the circular tour:
-              start → perm[0] → perm[1] → ... → perm[-1] → start
+            Sum of pairwise costs for the constrained tour.
+            Start and end are fixed; only intermediate stops are evolved.
             All costs come from the precomputed dict — O(N) lookup.
             """
-            full_tour = [start] + perm + [start]
+            full_tour = [start] + perm + [end]
             return sum(
                 pair_cost.get((a, b), float("inf"))
                 for a, b in zip(full_tour[:-1], full_tour[1:])
@@ -556,7 +690,8 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
         # ── Step 2: Evolve visit-order permutations ───────────────────────
         rng = random.Random(self.RANDOM_SEED)
 
-        # Initialise population with random shuffles of the intermediate stops
+        # Initialise population with random shuffles of the intermediate stops.
+        # The fixed start/end are never part of the chromosome.
         population = []
         for _ in range(self.TSP_POPULATION_SIZE):
             perm = intermediates[:]
@@ -613,9 +748,10 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
             population = new_pop
 
         # ── Step 3: Expand best permutation into a full road path ─────────
-        # The tour is circular: [start, stop_1, stop_2, ..., stop_{N-1}, start]
+        # The final stop sequence honours the benchmark constraint:
+        # fixed start, free middle order, fixed end.
         # Each leg is expanded to a real road path using shortest_path.
-        full_tour_stops = [start] + best_perm + [start]   # first == last → circular
+        full_tour_stops = [start] + best_perm + [end]
         full_route: list = []
 
         for src, dst in zip(full_tour_stops[:-1], full_tour_stops[1:]):
@@ -648,16 +784,20 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(
             G, self.name, scenario_name,
-            start, start,   # source == target because the tour is circular
+            start, end,
             full_route, ms,
             metadata={
                 "algorithm_variant": "tsp_ga",
-                "generations":       self.GENERATIONS,
-                "population":        self.POPULATION_SIZE,
+                "order_objective":   "ga_stop_permutation_travel_time",
+                "order_score":       best_cost,
+                "generations":       len(gen_history),
+                "population":        self.TSP_POPULATION_SIZE,
                 "crossover_rate":    self.CROSSOVER_RATE,
                 "mutation_rate":     self.MUTATION_RATE,
                 "stop_count":        len(nodes),
+                "round_trip":        round_trip,
                 "visit_order":       full_tour_stops,
+                "visit_order_nodes": full_tour_stops,
                 "gen_history":       gen_history,
             },
         )
@@ -991,6 +1131,82 @@ class AntColonyRouting(BaseRoutingAlgorithm):
                 raise nx.NetworkXNoPath(f"ACO: no path from {source} to {target}")
 
         return best_path
+
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
+        """Choose the next destination with stop-level ant-colony search."""
+        t0 = time.perf_counter()
+        start, end, middle = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        if start is None or (not middle and start == end):
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name, start or -1, end or -1,
+                "Need at least 2 stops for multi-stop routing", ms
+            )
+
+        stops = _unique_preserve_order([start] + middle + [end])
+        pair_cost = _pairwise_stop_costs(G, stops, "travel_time")
+        rng = random.Random(self.RANDOM_SEED)
+        pheromone = {}
+        best_order = [start] + middle + [end]
+        best_cost = _tour_cost(best_order, pair_cost)
+
+        for _ in range(self.N_ITERATIONS):
+            iteration_best = None
+            iteration_cost = float("inf")
+            for _ in range(self.N_ANTS):
+                remaining = middle[:]
+                current = start
+                order = [start]
+                while remaining:
+                    weights = []
+                    for candidate in remaining:
+                        tau = pheromone.get((current, candidate), self.TAU_INIT)
+                        cost = pair_cost.get((current, candidate), float("inf"))
+                        eta = 1.0 / cost if cost > 0 and math.isfinite(cost) else 0.0
+                        weights.append((tau ** self.ALPHA) * (eta ** self.BETA))
+                    chosen = _weighted_choice(remaining, weights, rng)
+                    order.append(chosen)
+                    remaining.remove(chosen)
+                    current = chosen
+                order.append(end)
+
+                cost = _tour_cost(order, pair_cost)
+                if cost < iteration_cost:
+                    iteration_best = order
+                    iteration_cost = cost
+
+            for key in list(pheromone.keys()):
+                pheromone[key] *= (1.0 - self.RHO)
+                if pheromone[key] < 1e-6:
+                    del pheromone[key]
+
+            if iteration_best:
+                deposit = self.Q / iteration_cost if iteration_cost > 0 else 0.0
+                for src, dst in zip(iteration_best[:-1], iteration_best[1:]):
+                    pheromone[(src, dst)] = pheromone.get(
+                        (src, dst), self.TAU_INIT
+                    ) + deposit
+                if iteration_cost < best_cost:
+                    best_order = iteration_best
+                    best_cost = iteration_cost
+
+        ms = (time.perf_counter() - t0) * 1000
+        return _multi_stop_result(
+            self, G, scenario_name, best_order, ms,
+            "aco_stop_pheromone_travel_time", best_cost, "travel_time",
+            {
+                "n_ants": self.N_ANTS,
+                "n_iterations": self.N_ITERATIONS,
+                "alpha": self.ALPHA,
+                "beta": self.BETA,
+                "rho": self.RHO,
+            },
+        )
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
         """Run ACO and wrap the result in a RouteResult."""
@@ -2110,6 +2326,81 @@ class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
             "candidate_streets": _route_streets(G, candidate),
         }
 
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
+        """Choose visit order with simulated annealing over stop permutations."""
+        t0 = time.perf_counter()
+        start, end, middle = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        if start is None or (not middle and start == end):
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name, start or -1, end or -1,
+                "Need at least 2 stops for multi-stop routing", ms
+            )
+
+        stops = _unique_preserve_order([start] + middle + [end])
+        pair_cost = _pairwise_stop_costs(G, stops, "length")
+        rng = random.Random(self.RANDOM_SEED)
+
+        current_middle = middle[:]
+        rng.shuffle(current_middle)
+        current_order = [start] + current_middle + [end]
+        current_score = _tour_cost(current_order, pair_cost)
+        best_order = current_order[:]
+        best_score = current_score
+        temperature = self.INITIAL_TEMPERATURE
+
+        for _ in range(self.ITERATIONS):
+            candidate_middle = current_middle[:]
+            if len(candidate_middle) >= 2:
+                if rng.random() < 0.5:
+                    i, j = rng.sample(range(len(candidate_middle)), 2)
+                    candidate_middle[i], candidate_middle[j] = (
+                        candidate_middle[j], candidate_middle[i]
+                    )
+                else:
+                    i, j = sorted(rng.sample(range(len(candidate_middle)), 2))
+                    candidate_middle[i:j + 1] = reversed(candidate_middle[i:j + 1])
+
+            candidate_order = [start] + candidate_middle + [end]
+            candidate_score = _tour_cost(candidate_order, pair_cost)
+            delta = candidate_score - current_score
+
+            accept = delta <= 0
+            if not accept and temperature > self.MIN_TEMPERATURE:
+                accept_prob = math.exp(-delta / temperature)
+                accept = rng.random() < accept_prob
+
+            if accept:
+                current_middle = candidate_middle
+                current_order = candidate_order
+                current_score = candidate_score
+
+            if current_score < best_score:
+                best_order = current_order[:]
+                best_score = current_score
+
+            temperature = max(self.MIN_TEMPERATURE,
+                              temperature * self.COOLING_RATE)
+
+        ms = (time.perf_counter() - t0) * 1000
+        return _multi_stop_result(
+            self, G, scenario_name, best_order, ms,
+            "sa_stop_permutation_length", best_score, "length",
+            {
+                "algorithm_family": "simulated_annealing",
+                "generations": self.ITERATIONS,
+                "population": 1,
+                "initial_temperature": self.INITIAL_TEMPERATURE,
+                "cooling_rate": self.COOLING_RATE,
+                "min_temperature": self.MIN_TEMPERATURE,
+            },
+        )
+
     def find_route(self, G, source_node, target_node, scenario_name=""):
         """
         Run Simulated Annealing from source_node to target_node.
@@ -2347,6 +2638,100 @@ class ParticleSwarmRouting(BaseRoutingAlgorithm):
     SOCIAL_WEIGHT    = 1.4   # pull toward swarm's global best (slightly stronger)
     MUTATION_RATE    = 0.25  # probability of random sub-segment mutation each step
     RANDOM_SEED      = 42
+
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
+        """Choose visit order with discrete PSO over stop permutations."""
+        t0 = time.perf_counter()
+        start, end, middle = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        if start is None or (not middle and start == end):
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name, start or -1, end or -1,
+                "Need at least 2 stops for multi-stop routing", ms
+            )
+
+        stops = _unique_preserve_order([start] + middle + [end])
+        pair_cost = _pairwise_stop_costs(G, stops, "travel_time")
+        rng = random.Random(self.RANDOM_SEED)
+
+        def order_from_middle(perm):
+            return [start] + perm + [end]
+
+        def score(perm):
+            return _tour_cost(order_from_middle(perm), pair_cost)
+
+        particles = []
+        for _ in range(self.N_PARTICLES):
+            perm = middle[:]
+            rng.shuffle(perm)
+            particles.append(perm)
+
+        personal_bests = [p[:] for p in particles]
+        personal_scores = [score(p) for p in particles]
+        best_idx = min(range(len(personal_bests)), key=lambda i: personal_scores[i])
+        global_best = personal_bests[best_idx][:]
+        global_score = personal_scores[best_idx]
+
+        def move_toward(current: list, target: list, probability: float) -> list:
+            moved = current[:]
+            for idx, desired in enumerate(target):
+                if idx >= len(moved) or moved[idx] == desired:
+                    continue
+                if rng.random() > probability:
+                    continue
+                swap_idx = moved.index(desired)
+                moved[idx], moved[swap_idx] = moved[swap_idx], moved[idx]
+            return moved
+
+        for _ in range(self.N_ITERATIONS):
+            for idx, particle in enumerate(particles):
+                updated = particle[:]
+
+                if rng.random() < self.INERTIA_WEIGHT:
+                    rng.shuffle(updated)
+
+                updated = move_toward(
+                    updated, personal_bests[idx],
+                    min(1.0, self.COGNITIVE_WEIGHT / 2.0)
+                )
+                updated = move_toward(
+                    updated, global_best,
+                    min(1.0, self.SOCIAL_WEIGHT / 2.0)
+                )
+
+                if len(updated) >= 2 and rng.random() < self.MUTATION_RATE:
+                    i, j = rng.sample(range(len(updated)), 2)
+                    updated[i], updated[j] = updated[j], updated[i]
+
+                updated_score = score(updated)
+                particles[idx] = updated
+
+                if updated_score < personal_scores[idx]:
+                    personal_bests[idx] = updated[:]
+                    personal_scores[idx] = updated_score
+                    if updated_score < global_score:
+                        global_best = updated[:]
+                        global_score = updated_score
+
+        best_order = order_from_middle(global_best)
+        ms = (time.perf_counter() - t0) * 1000
+        return _multi_stop_result(
+            self, G, scenario_name, best_order, ms,
+            "pso_stop_permutation_travel_time", global_score, "travel_time",
+            {
+                "n_particles": self.N_PARTICLES,
+                "n_iterations": self.N_ITERATIONS,
+                "inertia_weight": self.INERTIA_WEIGHT,
+                "cognitive_weight": self.COGNITIVE_WEIGHT,
+                "social_weight": self.SOCIAL_WEIGHT,
+                "mutation_rate": self.MUTATION_RATE,
+            },
+        )
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
         """Run PSO and return the best path found by the swarm."""

@@ -271,6 +271,7 @@ class BenchmarkRunner:
                 scenario.name,
                 source_node=scenario.source_node,
                 target_node=scenario.target_node,
+                round_trip=scenario.round_trip,
             )
 
         if len(nodes) <= 2 and not scenario.round_trip:
@@ -507,6 +508,7 @@ class BenchmarkRunner:
                     scenario.name,
                     source_node=scenario.source_node,
                     target_node=scenario.target_node,
+                    round_trip=scenario.round_trip,
                 )
                 continue
 
@@ -911,13 +913,13 @@ def run_platform(cfg):
     log.info(f"Graph: {G.number_of_nodes()} nodes  |  Facilities: {len(fac)}")
 
     # ── Register algorithms ──────────────────────────────────
-    # GA handles multi-stop tours via _route_multi_stop (TSP-GA, evolves visit order).
-    # ACO, SA, and PSO route leg-by-leg using the benchmark's leg decomposition.
+    # Every model implements _route_multi_stop for category scenarios:
+    # start/end are fixed, while each model chooses its own intermediate order.
     registry = AlgorithmRegistry()
-    registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
-    registry.register(AntColonyRouting())         # pheromone-based path search
-    registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
-    registry.register(ParticleSwarmRouting())     # swarm path optimisation
+    registry.register(GeneticAlgorithm())         # TSP-GA visit-order evolution
+    registry.register(AntColonyRouting())         # pheromone stop-order search
+    registry.register(GeraldSimulatedAnnealing()) # distance-based stop-order SA
+    registry.register(ParticleSwarmRouting())     # swarm stop-order optimisation
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────

@@ -151,7 +151,7 @@ class ResultVisualiser:
                 title = "END"
                 icon  = folium.Icon(color="red", icon="stop", prefix="glyphicon")
             else:
-                # Show the actual GA visit rank next to the stop number
+                # Show the selected visit rank next to the stop number.
                 rank_note = f" (visit #{visit_rank})" if visit_order_nodes else ""
                 title = f"STOP {idx}{rank_note}"
                 if any(k in lbl_lower for k in ("polisi", "polsek", "polres", "polda",
@@ -172,7 +172,7 @@ class ResultVisualiser:
             if idx == 1 and scenario.round_trip:
                 popup_body += "<br><i>(route returns here)</i>"
             if visit_order_nodes and idx > 1:
-                popup_body += f"<br><small>GA visit order: #{visit_rank}</small>"
+                popup_body += f"<br><small>Visit order: #{visit_rank}</small>"
 
             folium.Marker(
                 list(coords),

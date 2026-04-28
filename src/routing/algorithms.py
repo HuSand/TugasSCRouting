@@ -1014,12 +1014,6 @@ class AntColonyRouting(BaseRoutingAlgorithm):
         )
 
 
-# ══════════════════════════════════════════════════════════════════
-# SECTION 6: SIMULATED ANNEALING (SA)
-                "strategy":     "pheromone × (1/travel_time) visibility, no highway weighting",
-            }
-        )
- 
 """
 ════════════════════════════════════════════════════════════════
  ALGORITMA: ACO-Elite (Ant Colony Optimization — Optimized)
@@ -1033,16 +1027,7 @@ class AntColonyRouting(BaseRoutingAlgorithm):
    4. Jalankan: python main.py compare
 ════════════════════════════════════════════════════════════════
 """
- 
-import time
-import math
-import random
-import heapq
-import networkx as nx
- 
-from src.routing.base import BaseRoutingAlgorithm, RouteResult
- 
- 
+
 class AntColonyElite(BaseRoutingAlgorithm):
     """
     ── ACO-ELITE: ANT COLONY OPTIMIZATION (VERSI TEROPTIMASI) ───
@@ -1520,25 +1505,561 @@ class AntColonyElite(BaseRoutingAlgorithm):
                                  "direction_visibility + elitist + 2opt + stagnation_reset",
             }
         )
- 
+    
 
- 
-# ──────────────────────────────────────────────────────────────
-# CARA REGISTRASI
-# Tambahkan baris ini di bagian paling bawah algorithms.py:
-#
-#   REGISTRY.register(AntColonyRouting())
-#
-# Inspired by the metallurgical process of slowly cooling metal.
-# Starts with a random valid path and iteratively proposes small
-# changes (neighbours). Improvements are always accepted; degradations
-# are accepted with probability exp(-Δcost / T), where T decreases
-# over time. Early on (high T) it explores widely; later (low T) it
-# exploits the best solution found.
-#
-# Objective: minimise physical distance (metres), not travel_time.
-# ══════════════════════════════════════════════════════════════════
 
+
+class AntColonyElitePro(BaseRoutingAlgorithm):
+    """
+    ACO-Elite Pro — implementasi penuh dengan MMAS + rank-based deposit
+    + Or-opt post-processing + haversine cache + direction² visibility.
+
+    Dirancang untuk kualitas rute optimal dalam rentang runtime 1-3 menit.
+    """
+
+    name        = "aco_elite_pro"
+    description = (
+        "ACO-Elite Pro — MMAS + rank-based deposit + Or-opt + "
+        "direction² visibility + haversine cache + subgraph BFS-2"
+    )
+
+    # ──────────────────────────────────────────────────────────────────
+    # PARAMETER KOLONI
+    # Semua parameter ini berpengaruh pada trade-off kualitas vs runtime.
+    # Lihat PARAMETER TUNING GUIDE di header untuk panduan adjustment.
+    # ──────────────────────────────────────────────────────────────────
+    N_ANTS          = 20     # jumlah semut per iterasi
+                             # lebih banyak → lebih baik, lebih lambat
+    N_ITERATIONS    = 25     # jumlah iterasi total
+                             # trade-off utama runtime vs kualitas
+
+    # Parameter probabilitas transisi ACO standar
+    ALPHA           = 1.0    # bobot feromon τ
+                             # tinggi → semut ikut jejak populer (eksploitatif)
+                             # rendah → semut lebih independen (eksplorasi)
+    BETA            = 3.0    # bobot visibilitas η
+                             # tinggi → semut lebih greedy ke target
+                             # rendah → feromon lebih dominan
+
+    # Parameter feromon
+    RHO             = 0.10   # laju evaporasi (0.0–1.0)
+                             # kecil → feromon bertahan lama (memori panjang)
+                             # besar → feromon cepat hilang (eksplorasi lebih)
+    Q               = 100.0  # konstanta deposit feromon
+                             # memengaruhi skala nilai feromon absolut
+    TAU_INIT        = 1.0    # feromon awal semua edge
+
+    # MMAS (Min-Max Ant System) — batas feromon
+    # TAU_MAX dan TAU_MIN dihitung dinamis dari best_cost,
+    # tapi TAU_MIN_FLOOR adalah batas bawah absolut (fallback)
+    TAU_MIN_FLOOR   = 1e-5   # batas bawah absolut feromon
+    MMAS_RATIO      = 0.05   # TAU_MIN = TAU_MAX × MMAS_RATIO
+                             # kecil → range feromon lebih lebar (lebih eksplorasi)
+                             # besar → range sempit (lebih eksploitatif)
+
+    # Parameter rank-based deposit
+    W_RANK          = 5      # berapa semut teratas yang deposit feromon
+                             # W=1 → pure elitist (hanya terbaik)
+                             # W=N_ANTS → semua semut deposit (egaliter)
+                             # W=5 adalah sweet spot dari literatur
+
+    # Subgraph
+    BFS_RADIUS      = 2      # radius ekspansi BFS dari jalur Dijkstra
+                             # 0 → hanya node Dijkstra (terlalu ketat)
+                             # 1 → ~50-200 node (cepat tapi eksplorasi terbatas)
+                             # 2 → ~200-800 node (recommended: eksplorasi bermakna)
+                             # 3 → ~1000+ node (lambat, hampir seperti full graph)
+    TOP_K           = 10     # kandidat tetangga per node
+                             # lebih besar → lebih banyak pilihan, lebih lambat
+
+    # Or-opt post-processing
+    OR_OPT_MAX_SEG  = 3      # panjang segmen maksimum yang dipindah (1, 2, atau 3)
+    OR_OPT_MAX_LEN  = 300    # batas path length untuk Or-opt
+                             # path > 300 node di-skip (terlalu mahal)
+
+    RANDOM_SEED     = 42
+
+    # ──────────────────────────────────────────────────────────────────
+    def __init__(self):
+        # Cache haversine per-instance
+        # Key: (min_node_id, max_node_id) → float meter
+        self._hav_cache: dict[tuple[int, int], float] = {}
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN A: SUBGRAPH CONSTRUCTION
+    # ══════════════════════════════════════════════════════════════════
+
+    def _build_subgraph(self, G, dijkstra_path: list) -> set:
+        relevant = set(dijkstra_path)
+        frontier = set(dijkstra_path)
+
+        for _ in range(self.BFS_RADIUS):
+            next_frontier = set()
+            for node in frontier:
+                for nb in G.successors(node):
+                    if nb not in relevant:
+                        relevant.add(nb)
+                        next_frontier.add(nb)
+                for nb in G.predecessors(node):
+                    if nb not in relevant:
+                        relevant.add(nb)
+                        next_frontier.add(nb)
+            frontier = next_frontier
+            if not frontier:
+                break  # sudah tidak ada node baru
+
+        return relevant
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN B: CANDIDATE LIST PRE-COMPUTATION
+    # ══════════════════════════════════════════════════════════════════
+
+    def _build_candidate_lists(self, G, subgraph_nodes: set) -> dict:
+        candidate_lists = {}
+        for node in subgraph_nodes:
+            neighbors: list[tuple] = []
+            for nb in G.successors(node):
+                if nb not in subgraph_nodes:
+                    continue
+                edge_dict = G.get_edge_data(node, nb)
+                if not edge_dict:
+                    continue
+                best_tt = min(
+                    float(d.get("travel_time", 9999))
+                    for d in edge_dict.values()
+                )
+                if 0 < best_tt < 9999:
+                    base_eta = 1.0 / best_tt
+                    neighbors.append((nb, best_tt, base_eta))
+
+            # Urutkan ascending travel_time, ambil TOP-K
+            neighbors.sort(key=lambda x: x[1])
+            candidate_lists[node] = neighbors[:self.TOP_K]
+
+        return candidate_lists
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN C: VISIBILITY FUNCTION (dengan haversine cache)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _haversine(self, G, u: int, v: int) -> float:
+        key = (u, v) if u <= v else (v, u)
+        cached = self._hav_cache.get(key)
+        if cached is not None:
+            return cached
+
+        try:
+            nu   = G.nodes[u]
+            nv   = G.nodes[v]
+            lat1 = math.radians(nu["y"])
+            lon1 = math.radians(nu["x"])
+            lat2 = math.radians(nv["y"])
+            lon2 = math.radians(nv["x"])
+            dlat = lat2 - lat1
+            dlon = lon2 - lon1
+            a = (
+                math.sin(dlat / 2) ** 2
+                + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            )
+            result = 2.0 * 6_371_000.0 * math.asin(math.sqrt(max(0.0, a)))
+        except Exception:
+            result = 1.0
+
+        self._hav_cache[key] = result
+        return result
+
+    def _visibility(
+        self,
+        base_eta: float,
+        current: int,
+        neighbor: int,
+        target: int,
+        G
+    ) -> float:
+        d_current  = self._haversine(G, current, target)
+        d_neighbor = self._haversine(G, neighbor, target)
+
+        if d_neighbor < 1.0:
+            direction_factor = 2.0      # neighbor sangat dekat target → max bonus
+        elif d_current < 1.0:
+            direction_factor = 1.0      # sudah di target, langkah ini netral
+        else:
+            direction_factor = d_current / d_neighbor
+
+        return base_eta * (direction_factor ** 2)
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN D: PATH CONSTRUCTION (satu semut)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _build_ant_path(
+        self,
+        G,
+        source: int,
+        target: int,
+        pheromone: dict,
+        tau_min: float,
+        candidate_lists: dict,
+        rng: random.Random,
+        max_steps: int
+    ) -> list | None:
+        path      = [source]
+        visited   = {source}
+        current   = source
+        bridged   = False      # flag: sudah pakai Dijkstra bridge?
+
+        for _ in range(max_steps):
+            if current == target:
+                return path
+
+            # Ambil kandidat yang belum dikunjungi
+            raw = candidate_lists.get(current, [])
+            candidates = [(nb, tt, eta) for nb, tt, eta in raw
+                          if nb not in visited]
+
+            if not candidates:
+                # Tidak ada kandidat → coba Dijkstra bridge
+                # Hanya boleh sekali per semut (mencegah infinite bridging)
+                if bridged:
+                    return None
+                bridged = True
+                try:
+                    bridge = nx.shortest_path(
+                        G, current, target, weight="travel_time"
+                    )
+                    path += bridge[1:]
+                    return path
+                except (nx.NetworkXNoPath, nx.NodeNotFound):
+                    return None
+
+            # Shortcut: jika target langsung ada di kandidat
+            if any(nb == target for nb, _, _ in candidates):
+                path.append(target)
+                return path
+
+            # ── Hitung probabilitas transisi ──────────────────────
+            scores: list[float] = []
+            for nb, tt, base_eta in candidates:
+                # Ambil feromon; jika tidak ada di dict, gunakan tau_min
+                # (bukan TAU_INIT) agar konsisten dengan MMAS
+                tau   = pheromone.get((current, nb), tau_min)
+                eta   = self._visibility(base_eta, current, nb, target, G)
+                score = (tau ** self.ALPHA) * (eta ** self.BETA)
+                scores.append(score)
+
+            total = sum(scores)
+            if total <= 0.0:
+                # Semua skor nol → pilih secara acak (uniform fallback)
+                chosen = rng.choice(candidates)[0]
+            else:
+                # Roulette wheel: O(K) dimana K = len(candidates) ≤ TOP_K
+                probs  = [s / total for s in scores]
+                r      = rng.random()
+                cumul  = 0.0
+                chosen = candidates[-1][0]      # default: kandidat terakhir
+                for (nb, _, _), prob in zip(candidates, probs):
+                    cumul += prob
+                    if r <= cumul:
+                        chosen = nb
+                        break
+
+            path.append(chosen)
+            visited.add(chosen)
+            current = chosen
+
+        return None   # melebihi max_steps tanpa mencapai target
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN E: MMAS PHEROMONE MANAGEMENT
+    # ══════════════════════════════════════════════════════════════════
+
+    def _compute_mmas_bounds(self, best_cost: float, n_nodes: int) -> tuple[float, float]:
+        tau_max = self.Q / best_cost if best_cost > 0 else self.Q
+        tau_min = max(tau_max * self.MMAS_RATIO, self.TAU_MIN_FLOOR)
+        return tau_max, tau_min
+
+    def _evaporate_and_clip(
+        self,
+        pheromone: dict,
+        tau_min: float,
+        tau_max: float
+    ) -> None:
+        cleanup_threshold = self.TAU_MIN_FLOOR / 10.0
+        for key in list(pheromone.keys()):
+            pheromone[key] *= (1.0 - self.RHO)
+            # Clamp ke [tau_min, tau_max]
+            if pheromone[key] < tau_min:
+                pheromone[key] = tau_min
+            elif pheromone[key] > tau_max:
+                pheromone[key] = tau_max
+            # Hapus entry yang sangat kecil (memory cleanup)
+            if pheromone[key] < cleanup_threshold:
+                del pheromone[key]
+
+    def _deposit_rank_based(
+        self,
+        pheromone: dict,
+        tau_max: float,
+        ranked_paths: list,     # [(cost, path), ...] sorted ascending
+    ) -> None:
+        W = self.W_RANK
+        n_depositing = min(W, len(ranked_paths))
+
+        for rank_idx in range(n_depositing):
+            cost, path = ranked_paths[rank_idx]
+            if cost <= 0 or cost == float("inf"):
+                continue
+
+            # Bobot deposit: semut terbaik (rank_idx=0) dapat bobot W,
+            # semut peringkat terakhir yang deposit dapat bobot 1
+            weight  = W - rank_idx
+            deposit = weight * self.Q / cost
+
+            for u, v in zip(path[:-1], path[1:]):
+                key = (u, v)
+                new_val = pheromone.get(key, self.TAU_INIT) + deposit
+                # Clamp ke tau_max (MMAS constraint)
+                pheromone[key] = min(new_val, tau_max)
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN F: OR-OPT POST-PROCESSING
+    # ══════════════════════════════════════════════════════════════════
+
+    def _path_cost(self, G, path: list) -> float:
+        """Total travel_time path (menggunakan edge terbaik setiap hop)."""
+        total = 0.0
+        for u, v in zip(path[:-1], path[1:]):
+            ed = G.get_edge_data(u, v)
+            if not ed:
+                return float("inf")
+            total += min(float(d.get("travel_time", 9999)) for d in ed.values())
+        return total
+
+    def _edge_cost(self, G, u: int, v: int) -> float:
+        """Travel_time edge tunggal (u → v), atau inf jika tidak ada."""
+        ed = G.get_edge_data(u, v)
+        if not ed:
+            return float("inf")
+        return min(float(d.get("travel_time", 9999)) for d in ed.values())
+
+    def _or_opt(self, G, path: list) -> list:
+        if len(path) < 5 or len(path) > self.OR_OPT_MAX_LEN:
+            return path
+
+        best      = path[:]
+        best_cost = self._path_cost(G, best)
+        improved  = True
+
+        while improved:
+            improved = False
+            n = len(best)
+
+            for seg_len in range(1, self.OR_OPT_MAX_SEG + 1):
+                if improved:
+                    break  # restart dari seg_len=1 jika ada perbaikan
+
+                for i in range(1, n - seg_len):
+                    # Segmen yang akan dipindah: best[i : i+seg_len]
+                    seg = best[i : i + seg_len]
+                    before_seg = best[i - 1]        # node sebelum segmen
+                    after_seg  = best[i + seg_len]  # node setelah segmen (bisa out-of-range)
+
+                    if i + seg_len >= n:
+                        continue   # segmen di ujung, tidak bisa dipindah
+
+                    # Biaya edge yang hilang ketika segmen dilepas:
+                    #   before_seg → seg[0]   (edge masuk segmen)
+                    #   seg[-1]    → after_seg (edge keluar segmen)
+                    # Biaya edge penghubung baru (before_seg → after_seg):
+                    cost_remove = (
+                        self._edge_cost(G, before_seg, seg[0])
+                        + self._edge_cost(G, seg[-1], after_seg)
+                    )
+                    cost_bridge = self._edge_cost(G, before_seg, after_seg)
+                    saving_remove = cost_remove - cost_bridge
+
+                    # Coba sisipkan segmen di setiap posisi j lain
+                    for j in range(1, n - seg_len):
+                        if j == i or (i <= j < i + seg_len):
+                            continue   # posisi yang sama atau tumpang tindih
+
+                        insert_before = best[j - 1]
+                        insert_after  = best[j]
+
+                        # Biaya edge yang hilang di posisi j:
+                        cost_remove_j = self._edge_cost(G, insert_before, insert_after)
+
+                        # Biaya edge baru di posisi j setelah sisip:
+                        cost_insert_j = (
+                            self._edge_cost(G, insert_before, seg[0])
+                            + self._edge_cost(G, seg[-1], insert_after)
+                        )
+
+                        # Perbaikan total = penghematan melepas segmen
+                        #                  - biaya menyisipkan segmen
+                        delta = saving_remove - (cost_insert_j - cost_remove_j)
+
+                        if delta > 1e-9:
+                            # Lakukan relocate move
+                            # Bangun path baru:
+                            #   path tanpa segmen, lalu sisipkan segmen di j
+                            path_without = best[:i] + best[i + seg_len:]
+                            # Sesuaikan indeks j karena path sudah berkurang
+                            j_adj = j if j < i else j - seg_len
+                            new_path = path_without[:j_adj] + seg + path_without[j_adj:]
+
+                            new_cost = self._path_cost(G, new_path)
+                            if new_cost < best_cost - 1e-9:
+                                best      = new_path
+                                best_cost = new_cost
+                                improved  = True
+                                break   # restart inner loop
+
+                    if improved:
+                        break   # restart outer loop
+
+        return best
+
+    # ══════════════════════════════════════════════════════════════════
+    # BAGIAN G: MAIN ACO LOOP
+    # ══════════════════════════════════════════════════════════════════
+
+    def _run_aco(self, G, source: int, target: int) -> list:
+        rng = random.Random(self.RANDOM_SEED)
+
+        # ── Step 1: Dijkstra warmup ──────────────────────────────────
+        try:
+            dijkstra_path = nx.shortest_path(
+                G, source, target, weight="travel_time"
+            )
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            raise nx.NetworkXNoPath(
+                f"ACO-Elite Pro: tidak ada jalur dari {source} ke {target}"
+            )
+
+        dijkstra_cost = self._path_cost(G, dijkstra_path)
+
+        # ── Step 2: Subgraph & candidate lists ──────────────────────
+        subgraph_nodes  = self._build_subgraph(G, dijkstra_path)
+        candidate_lists = self._build_candidate_lists(G, subgraph_nodes)
+        max_steps       = min(len(subgraph_nodes) * 2, 2000)
+
+        # ── Step 3: Inisialisasi MMAS bounds awal ───────────────────
+        tau_max, tau_min = self._compute_mmas_bounds(dijkstra_cost, len(subgraph_nodes))
+
+        # ── Step 4: Inisialisasi feromon ────────────────────────────
+        # Semua edge di subgraph mulai dari TAU_INIT
+        # Jalur Dijkstra mendapat warmup deposit tambahan agar semut
+        # punya "starting signal" yang baik sejak awal
+        pheromone: dict = {}
+        warmup_deposit = self.Q / dijkstra_cost if dijkstra_cost > 0 else 1.0
+        for u, v in zip(dijkstra_path[:-1], dijkstra_path[1:]):
+            init_val = min(self.TAU_INIT + warmup_deposit, tau_max)
+            pheromone[(u, v)] = init_val
+
+        best_path = dijkstra_path[:]
+        best_cost = dijkstra_cost
+
+        # ── Step 5: Loop iterasi koloni ──────────────────────────────
+        for iteration in range(self.N_ITERATIONS):
+
+            # (a) Setiap semut bangun path
+            iteration_results: list[tuple[float, list]] = []
+
+            for _ in range(self.N_ANTS):
+                path = self._build_ant_path(
+                    G, source, target,
+                    pheromone, tau_min,
+                    candidate_lists, rng, max_steps
+                )
+                if path is None or path[-1] != target:
+                    continue
+                cost = self._path_cost(G, path)
+                if cost < float("inf"):
+                    iteration_results.append((cost, path))
+
+            # (b) Urutkan hasil iterasi ascending (terbaik pertama)
+            iteration_results.sort(key=lambda x: x[0])
+
+            # (c) Update global best
+            if iteration_results:
+                iter_best_cost, iter_best_path = iteration_results[0]
+                if iter_best_cost < best_cost:
+                    best_cost = iter_best_cost
+                    best_path = iter_best_path[:]
+
+            # (d) Update MMAS bounds berdasarkan best_cost terkini
+            tau_max, tau_min = self._compute_mmas_bounds(
+                best_cost, len(subgraph_nodes)
+            )
+
+            # (e) Evaporasi + clamp ke [tau_min, tau_max]
+            self._evaporate_and_clip(pheromone, tau_min, tau_max)
+
+            # (f) Rank-based deposit dari top-W semut iterasi ini
+            self._deposit_rank_based(pheromone, tau_max, iteration_results)
+
+        # ── Step 6: Or-opt post-processing ──────────────────────────
+        optimized_path = self._or_opt(G, best_path)
+        optimized_cost = self._path_cost(G, optimized_path)
+        if optimized_cost < best_cost:
+            best_path = optimized_path
+
+        return best_path
+
+    # ══════════════════════════════════════════════════════════════════
+    # INTERFACE WAJIB — dipanggil oleh framework benchmark
+    # ══════════════════════════════════════════════════════════════════
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        """
+        Entry point yang dipanggil oleh benchmark framework.
+
+        Reset haversine cache di awal setiap query untuk menghindari
+        memory leak antar skenario (graph G bisa berbeda).
+        """
+        self._hav_cache = {}
+
+        t0 = time.perf_counter()
+        try:
+            route = self._run_aco(G, source_node, target_node)
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name,
+                source_node, target_node, str(e), ms
+            )
+
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name,
+            source_node, target_node, route, ms,
+            metadata={
+                "n_ants":           self.N_ANTS,
+                "n_iterations":     self.N_ITERATIONS,
+                "alpha":            self.ALPHA,
+                "beta":             self.BETA,
+                "rho":              self.RHO,
+                "q":                self.Q,
+                "tau_init":         self.TAU_INIT,
+                "mmas_ratio":       self.MMAS_RATIO,
+                "w_rank":           self.W_RANK,
+                "top_k":            self.TOP_K,
+                "bfs_radius":       self.BFS_RADIUS,
+                "or_opt_max_seg":   self.OR_OPT_MAX_SEG,
+                "subgraph_size":    "~200-800 nodes (BFS-2)",
+                "pheromone_scheme": "MMAS (Min-Max Ant System)",
+                "deposit_scheme":   f"rank-based top-{self.W_RANK}",
+                "visibility":       "direction²_guided + haversine_cache",
+                "post_processing":  f"Or-opt (seg 1-{self.OR_OPT_MAX_SEG}, max {self.OR_OPT_MAX_LEN} nodes)",
+            }
+        )
+    
+    # ══════════════════════════════════════════════════════════════════
+# SECTION 6: SIMULATED ANNEALING (SA)
+
+# "strategy": "pheromone × (1/travel_time) visibility, no highway weighting"
+ 
 class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
     """
     Simulated Annealing for shortest-distance path finding.

@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 ROUTE_COLORS = [
     "#E63946", "#2196F3", "#4CAF50", "#FF9800",
     "#9C27B0", "#00BCD4", "#FF5722", "#607D8B",
-    "#D81B60",
+    "#D81B60", "#000000", "#D3BA3F"
 ]
 
 ROUTE_COLOR_BY_ALGO = {
@@ -29,6 +29,8 @@ ROUTE_COLOR_BY_ALGO = {
     "aco_routing":    "#FF9800",
     "gerald_sa":      "#D81B60",
     "particle_swarm": "#2196F3",
+    "antColony_elite":"#000000",
+    "antColony_pro":  "#D3BA3F",
 }
 
 

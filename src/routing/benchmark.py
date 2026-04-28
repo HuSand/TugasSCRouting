@@ -851,10 +851,10 @@ def run_platform(cfg):
     from src.routing.algorithms import (
         GeneticAlgorithm,
         ChristofidesAlgorithm,
-        AntColonyRouting,
         GeraldSimulatedAnnealing,
         ParticleSwarmRouting,
-        AntColonyRouting, AntColonyElite,
+        AntColonyElite,
+        AntColonyElitePro,
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -889,21 +889,21 @@ def run_platform(cfg):
     # ACO, SA, and PSO route leg-by-leg using the benchmark's leg decomposition.
     registry = AlgorithmRegistry()
     registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
-    registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
-    registry.register(AntColonyRouting())         # pheromone-based path search
+    # registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
+    registry.register(AntColonyElitePro())         
     registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
     registry.register(ParticleSwarmRouting())     # swarm path optimisation
-    registry.register(DijkstraTime())      # baseline: rute tercepat
-    registry.register(DijkstraDistance()) # baseline: rute terpendek
-    registry.register(AStarTime())        # baseline: A* tercepat
-    registry.register(AStarDistance())    # baseline: A* terpendek
-    registry.register(ChristofidesAlgorithm())  # Christofides approximation
-    registry.register(SandyGA())          # Sandy
-    registry.register(BurhanGA())         # Burhan
-    registry.register(BimoGA())           # Bimo
-    registry.register(GeraldGA())         # Gerald
+    # registry.register(DijkstraTime())      # baseline: rute tercepat
+    # registry.register(DijkstraDistance()) # baseline: rute terpendek
+    # registry.register(AStarTime())        # baseline: A* tercepat
+    # registry.register(AStarDistance())    # baseline: A* terpendek
+    # registry.register(ChristofidesAlgorithm())  # Christofides approximation
+    # registry.register(SandyGA())          # Sandy
+    # registry.register(BurhanGA())         # Burhan
+    # registry.register(BimoGA())           # Bimo
+    # registry.register(GeraldGA())         # Gerald
     registry.register(GeraldSimulatedAnnealing())  # Gerald SA shortest path
-    registry.register(AntColonyRouting())
+    # registry.register(AntColonyRouting())
     registry.register(AntColonyElite())
     registry.summary()
 

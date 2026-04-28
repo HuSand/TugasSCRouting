@@ -23,6 +23,7 @@ ALL_COLORS = {
     "gerald_sa":      "#D81B60",
     "particle_swarm": "#2196F3",
     "antColony_elite":"#000000",
+    "antColony_pro":  "#D3BA3F",
 }
 
 

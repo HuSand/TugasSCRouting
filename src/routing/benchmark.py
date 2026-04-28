@@ -936,7 +936,6 @@ def run_platform(cfg):
     # registry.register(AntColonyRouting())
     registry.register(AntColonyElite())
     registry.register(GeneticAlgorithm())         # TSP-GA visit-order evolution
-    registry.register(AntColonyRouting())         # pheromone stop-order search
     registry.register(GeraldSimulatedAnnealing()) # distance-based stop-order SA
     registry.register(ParticleSwarmRouting())     # swarm stop-order optimisation
     registry.summary()

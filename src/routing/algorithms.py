@@ -44,6 +44,7 @@ import logging
 import time
 import math
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import networkx as nx
 
 from src.routing.base import BaseRoutingAlgorithm, RouteResult, Scenario
@@ -353,15 +354,22 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
     name        = "ga"
     description = "Genetic Algorithm — balanced time+distance (50/50), TSP-aware multi-stop"
 
-    # ── Hyperparameters ───────────────────────────────────────────────────
-    # These affect the trade-off between exploration (finding new solutions)
-    # and exploitation (refining what's already found).
-    POPULATION_SIZE = 30   # larger → more diversity, slower per generation
-    GENERATIONS     = 20   # more → better convergence, longer runtime
-    CROSSOVER_RATE  = 0.85  # probability of combining two parents (vs. copying)
-    MUTATION_RATE   = 0.6   # probability of applying mutation after crossover
-    TOURNAMENT_SIZE = 5     # selection pressure: higher → more elitist
-    RANDOM_SEED     = 42    # fixed seed for reproducible benchmark results
+    # ── Point-to-point hyperparameters (used by find_route) ──────────────
+    POPULATION_SIZE = 30
+    GENERATIONS     = 20
+    CROSSOVER_RATE  = 0.85
+    MUTATION_RATE   = 0.6
+    TOURNAMENT_SIZE = 5
+    RANDOM_SEED     = 42
+
+    # ── TSP multi-stop hyperparameters (used by _route_multi_stop) ───────
+    # Separate from point-to-point because TSP search space is smaller
+    # (permutations of ~50 stops vs. road paths with thousands of nodes),
+    # so fewer individuals and generations are needed to converge.
+    TSP_POPULATION_SIZE = 40    # individuals per generation
+    TSP_GENERATIONS     = 80    # max generations before forced stop
+    TSP_PATIENCE        = 15    # stop early if no improvement for this many gens
+    TSP_WORKERS         = 4     # parallel threads for pairwise precomputation
 
     # ─────────────────────────────────────────────────────────────────────
 
@@ -464,28 +472,34 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
         start         = nodes[0]
         intermediates = nodes[1:]   # these are the stops whose order is evolved
 
-        # ── Step 1: Precompute pairwise costs ─────────────────────────────
-        # Run one Dijkstra per stop-as-source; store results in a flat dict.
-        # This is far more efficient than calling shortest_path_length for
-        # every (src, dst) pair individually.
-        log.debug(f"  GA TSP [{scenario_name}]: precomputing {len(nodes)}×{len(nodes)} "
-                  f"cost matrix ({len(nodes)} Dijkstra sweeps)...")
+        # ── Step 1: Precompute pairwise costs (parallel) ──────────────────
+        # Run one Dijkstra sweep per stop as source, then extract costs to
+        # all other stops from the result. N sweeps instead of N² calls.
+        # ThreadPoolExecutor runs sweeps concurrently — each Dijkstra is
+        # independent, so threads don't block each other.
+        n_nodes = len(nodes)
+        log.info(f"  GA TSP [{scenario_name}]: precomputing {n_nodes}×{n_nodes} "
+                 f"cost matrix ({n_nodes} Dijkstra sweeps, "
+                 f"{self.TSP_WORKERS} threads)...")
 
-        pair_cost: dict = {}
-        for src in nodes:
+        def _dijkstra_row(src):
             try:
-                # Returns a generator of (node, distance) for all reachable nodes
-                lengths = dict(nx.single_source_dijkstra_path_length(
+                return src, dict(nx.single_source_dijkstra_path_length(
                     G, src, weight="travel_time"
                 ))
+            except (nx.NodeNotFound, nx.NetworkXError):
+                return src, {}
+
+        pair_cost: dict = {}
+        with ThreadPoolExecutor(max_workers=self.TSP_WORKERS) as pool:
+            for src, lengths in pool.map(_dijkstra_row, nodes):
                 for dst in nodes:
                     if dst != src:
                         pair_cost[(src, dst)] = lengths.get(dst, float("inf"))
-            except (nx.NodeNotFound, nx.NetworkXError):
-                # If src is somehow missing from the graph, mark all its pairs as inf
-                for dst in nodes:
-                    if dst != src:
-                        pair_cost.setdefault((src, dst), float("inf"))
+
+        log.info(f"  GA TSP [{scenario_name}]: cost matrix ready — "
+                 f"starting evolution (pop={self.TSP_POPULATION_SIZE}, "
+                 f"max_gen={self.TSP_GENERATIONS}, patience={self.TSP_PATIENCE})")
 
         # ── Tour cost helper (used inside the GA loop) ────────────────────
         def tour_cost(perm: list) -> float:
@@ -544,47 +558,49 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
 
         # Initialise population with random shuffles of the intermediate stops
         population = []
-        for _ in range(self.POPULATION_SIZE):
+        for _ in range(self.TSP_POPULATION_SIZE):
             perm = intermediates[:]
             rng.shuffle(perm)
             population.append(perm)
 
-        best_perm = intermediates[:]    # fallback: use the original stop order
-        best_cost = tour_cost(best_perm)
-        gen_history = []
+        best_perm     = intermediates[:]
+        best_cost     = tour_cost(best_perm)
+        gen_history   = []
+        no_improve    = 0   # consecutive generations without improvement
 
-        for gen_idx in range(self.GENERATIONS):
-            # Evaluate tour cost for every individual
+        for gen_idx in range(self.TSP_GENERATIONS):
             fitness  = [tour_cost(p) for p in population]
             best_idx = min(range(len(population)), key=lambda i: fitness[i])
             elite    = population[best_idx]
 
-            # Track the global best across all generations
-            if fitness[best_idx] < best_cost:
-                best_perm = elite[:]
-                best_cost = fitness[best_idx]
+            if fitness[best_idx] < best_cost - 1e-6:
+                best_perm  = elite[:]
+                best_cost  = fitness[best_idx]
+                no_improve = 0
+            else:
+                no_improve += 1
 
-            # Build stop-level coordinates for the best tour so far.
-            # These are the stop pin locations (not full road paths), connected
-            # in the GA's current best visit order. The evolution viewer uses
-            # these to animate how the tour shape changes across generations.
-            tour_coords = []
-            for n in [start] + best_perm + [start]:
-                nd = G.nodes.get(n)
-                if nd:
-                    tour_coords.append([round(float(nd["y"]), 5),
-                                        round(float(nd["x"]), 5)])
             gen_history.append({
-                "gen":    gen_idx + 1,
-                "min":    round(best_cost / 60, 3),  # convert s → minutes
-                "dist":   0.0,   # road-level distance computed after final expansion
-                "coords": tour_coords,               # stop-pin tour shape this generation
-                "streets": [],                       # no street names at TSP level
+                "gen":  gen_idx + 1,
+                "min":  round(best_cost / 60, 3),
+                "dist": 0.0,    # filled after final expansion
             })
 
-            # Build next generation with elitism (elite always survives)
+            # Log progress every 10 generations so user can see it's running
+            if (gen_idx + 1) % 10 == 0:
+                log.info(f"  GA TSP [{scenario_name}]: gen {gen_idx+1}/{self.TSP_GENERATIONS} "
+                         f"— best {best_cost/60:.2f} min "
+                         f"(no-improve streak: {no_improve}/{self.TSP_PATIENCE})")
+
+            # Early stopping — no point continuing if the population has converged
+            if no_improve >= self.TSP_PATIENCE:
+                log.info(f"  GA TSP [{scenario_name}]: early stop at gen {gen_idx+1} "
+                         f"(no improvement for {self.TSP_PATIENCE} gens)")
+                break
+
+            # Build next generation with elitism
             new_pop = [elite[:]]
-            while len(new_pop) < self.POPULATION_SIZE:
+            while len(new_pop) < self.TSP_POPULATION_SIZE:
                 p1 = _ga_tournament(population, fitness, self.TOURNAMENT_SIZE, rng)
                 if rng.random() < self.CROSSOVER_RATE:
                     p2    = _ga_tournament(population, fitness, self.TOURNAMENT_SIZE, rng)
@@ -615,6 +631,20 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
                 # Skip the first node of each leg to avoid duplicating junctions
                 full_route.extend(leg[1:])
 
+        # Backfill the final gen_history entry with actual road-level data
+        # now that we have the real expanded path.
+        final_dist_km = round(_ga_path_distance(G, full_route) / 1000, 3)
+        final_coords  = []
+        for n in full_route:
+            nd = G.nodes.get(n)
+            if nd:
+                final_coords.append([round(float(nd["y"]), 5),
+                                      round(float(nd["x"]), 5)])
+        if gen_history:
+            gen_history[-1]["dist"]    = final_dist_km
+            gen_history[-1]["coords"]  = final_coords
+            gen_history[-1]["streets"] = _route_streets(G, full_route)
+
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(
             G, self.name, scenario_name,
@@ -627,7 +657,6 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
                 "crossover_rate":    self.CROSSOVER_RATE,
                 "mutation_rate":     self.MUTATION_RATE,
                 "stop_count":        len(nodes),
-                # The chosen visit order — inspectable in comparison results
                 "visit_order":       full_tour_stops,
                 "gen_history":       gen_history,
             },
@@ -643,188 +672,7 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
 
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 4: CHRISTOFIDES ALGORITHM
-#
-# A classic TSP approximation algorithm for multi-stop routing.
-# Guaranteed to find a tour within 1.5× the optimal cost (on metric graphs).
-# Works by building a minimum spanning tree, matching odd-degree nodes,
-# and constructing an Eulerian circuit.
-#
-# For point-to-point (2-stop) scenarios, falls back to shortest_path.
-# ══════════════════════════════════════════════════════════════════
-
-def _build_metric_closure(G: nx.MultiDiGraph, nodes: list,
-                           weight: str = "travel_time") -> tuple:
-    """
-    Build a complete graph (metric closure) where the edge weight between
-    any two nodes equals the shortest-path distance between them in G.
-
-    Also returns pair_paths so the TSP tour can later be expanded back
-    to actual road-network sequences.
-
-    This is the preprocessing step for Christofides: the algorithm needs
-    a complete graph to construct the minimum spanning tree.
-    """
-    source_graph = G.to_undirected()   # Christofides requires undirected graph
-    closure = nx.Graph()
-    closure.add_nodes_from(nodes)
-    pair_paths = {}
-
-    for i, src in enumerate(nodes):
-        for dst in nodes[i + 1:]:
-            try:
-                path     = nx.shortest_path(source_graph, src, dst, weight=weight)
-                path_len = nx.shortest_path_length(source_graph, src, dst, weight=weight)
-                closure.add_edge(src, dst, weight=float(path_len))
-                pair_paths[(src, dst)] = path
-                pair_paths[(dst, src)] = list(reversed(path))
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                # An infinite-weight edge will never be selected by the MST
-                closure.add_edge(src, dst, weight=float("inf"))
-
-    return closure, pair_paths
-
-
-def _christofides_tour(closure: nx.Graph, start_node=None) -> list:
-    """
-    Run the Christofides TSP approximation on the metric closure.
-
-    Returns an ordered list of stop nodes to visit. If start_node is given,
-    the tour is rotated so it begins at that node (useful for matching a
-    known depot or start facility).
-    """
-    tour = nx.approximation.traveling_salesman_problem(
-        closure,
-        weight="weight",
-        cycle=False,
-        method=nx.approximation.christofides,
-    )
-    # NetworkX may return a closed tour (first == last); remove the duplicate
-    if tour and tour[0] == tour[-1]:
-        tour = tour[:-1]
-    # Rotate so the tour starts at start_node if provided
-    if start_node in tour:
-        idx  = tour.index(start_node)
-        tour = tour[idx:] + tour[:idx]
-    return tour
-
-
-def _expand_tsp_tour_to_road_path(G: nx.MultiDiGraph, tsp_tour: list,
-                                   weight: str = "travel_time") -> list:
-    """
-    Convert a TSP tour (a sequence of stop node IDs) into a full road-network
-    path by connecting each consecutive pair with its shortest road path.
-
-    Returns the concatenated list of node IDs from tour[0] to tour[-1].
-    """
-    if len(tsp_tour) < 2:
-        return tsp_tour
-
-    full_path = []
-    for src, dst in zip(tsp_tour[:-1], tsp_tour[1:]):
-        leg = nx.shortest_path(G, src, dst, weight=weight)
-        if not full_path:
-            full_path.extend(leg)
-        else:
-            full_path.extend(leg[1:])   # skip duplicate junction
-
-    return full_path if full_path else tsp_tour
-
-
-class ChristofidesAlgorithm(BaseRoutingAlgorithm):
-    """
-    Christofides TSP approximation for multi-stop routing.
-
-    For scenarios with 3 or more stops:
-      1. Build a metric closure (complete graph of pairwise shortest-path costs).
-      2. Run the Christofides algorithm to find a near-optimal visit order.
-      3. Expand the tour back to a full road-network path.
-
-    Theoretical guarantee: the tour cost is at most 1.5× the optimal TSP solution
-    (on metric/symmetric graphs). In practice often much closer to optimal.
-
-    For 2-stop scenarios, falls back to plain shortest_path.
-    """
-    name        = "christofides"
-    description = "Christofides — multi-stop TSP approximation (1.5× optimal bound)"
-
-    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
-                          source_node: int = None,
-                          target_node: int = None) -> RouteResult:
-        """Handle multi-stop scenarios via Christofides TSP approximation."""
-        t0    = time.perf_counter()
-        nodes = list(dict.fromkeys(nodes))   # deduplicate while preserving order
-
-        # Degenerate case: fewer than 3 stops → just run shortest_path
-        if len(nodes) < 3:
-            sn = source_node if source_node is not None else (nodes[0] if nodes else None)
-            tn = target_node if target_node is not None else (nodes[-1] if nodes else None)
-            if sn is None or tn is None:
-                ms = (time.perf_counter() - t0) * 1000
-                return RouteResult.failure(self.name, scenario_name, -1, -1,
-                                           "Not enough nodes for routing", ms)
-            try:
-                route = nx.shortest_path(G, sn, tn, weight="travel_time")
-            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-                ms = (time.perf_counter() - t0) * 1000
-                return RouteResult.failure(self.name, scenario_name, sn, tn, str(e), ms)
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.build(G, self.name, scenario_name, sn, tn, route, ms, {
-                "algorithm_variant": "point_to_point_fallback",
-                "reason": "fewer_than_three_waypoints",
-            })
-
-        # Full Christofides pipeline
-        closure, pair_paths = _build_metric_closure(G, nodes, weight="travel_time")
-        tour = _christofides_tour(closure, start_node=source_node or nodes[0])
-
-        if len(tour) < 2:
-            ms = (time.perf_counter() - t0) * 1000
-            sn = source_node or nodes[0]
-            tn = target_node or nodes[-1]
-            return RouteResult.failure(self.name, scenario_name, sn, tn,
-                                       "Christofides returned an empty tour", ms)
-
-        try:
-            route = _expand_tsp_tour_to_road_path(G, tour, weight="travel_time")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms  = (time.perf_counter() - t0) * 1000
-            sn  = source_node or nodes[0]
-            tn  = target_node or nodes[-1]
-            return RouteResult.failure(self.name, scenario_name, sn, tn, str(e), ms)
-
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(
-            G, self.name, scenario_name,
-            source_node if source_node is not None else nodes[0],
-            target_node if target_node is not None else nodes[-1],
-            route, ms,
-            metadata={
-                "algorithm_variant":     "christofides_tsp",
-                "multi_stop":            True,
-                "stop_count":            len(nodes),
-                "stops":                 nodes,
-                "tour_nodes":            tour,
-                "metric_closure_nodes":  len(closure.nodes()),
-                "expanded_path_nodes":   len(route),
-                "valid_solution":        bool(route),
-            },
-        )
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        """Point-to-point fallback: plain shortest_path by travel_time."""
-        t0 = time.perf_counter()
-        try:
-            route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name,
-                                       source_node, target_node, str(e), ms)
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(G, self.name, scenario_name,
-                                 source_node, target_node, route, ms,
-                                 {"algorithm_variant": "point_to_point_fallback"})
-
+# SECTION 4: ANT COLONY OPTIMIZATION (ACO) — renumbered after Christofides removal
 
 # ══════════════════════════════════════════════════════════════════
 # SECTION 5: ANT COLONY OPTIMIZATION (ACO)

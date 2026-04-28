@@ -503,7 +503,7 @@ def run_platform(cfg):
     from src.routing.algorithms import (
         DijkstraTime, DijkstraDistance, AStarTime, AStarDistance,
         ChristofidesAlgorithm,
-        SandyGA, BurhanGA, BimoGA, GeraldGA, GeraldSimulatedAnnealing, AntColonyRouting,
+        SandyGA, BurhanGA, BimoGA, GeraldGA, GeraldSimulatedAnnealing, AntColonyRouting, AntColonyElite,
         EXAMPLE_SCENARIOS,
     )
     from src.routing.visualize import ResultVisualiser
@@ -548,6 +548,7 @@ def run_platform(cfg):
     registry.register(GeraldGA())         # Gerald
     registry.register(GeraldSimulatedAnnealing())  # Gerald SA shortest path
     registry.register(AntColonyRouting())
+    registry.register(AntColonyElite())
     registry.summary()
 
     # ── Build scenarios ──────────────────────────────────────

@@ -28,6 +28,7 @@ ALL_COLORS = {
     "astar_time":        "#00BCD4",
     "astar_distance":    "#607D8B",
     "antColony_army":    "#000000",
+    "ant_eliteColony":   "#2B7541",
 }
 
 

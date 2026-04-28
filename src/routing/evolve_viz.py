@@ -17,18 +17,12 @@ from src.routing.base import RouteResult, Scenario
 log = logging.getLogger(__name__)
 
 ALL_COLORS = {
-    "sandy_ga":          "#E63946",
-    "burhan_ga":         "#2196F3",
-    "bimo_ga":           "#4CAF50",
-    "gerald_ga":         "#FF9800",
-    "gerald_sa":         "#D81B60",
-    "christofides":      "#2ECC71",
-    "dijkstra_time":     "#9C27B0",
-    "dijkstra_distance": "#795548",
-    "astar_time":        "#00BCD4",
-    "astar_distance":    "#607D8B",
-    "antColony_army":    "#000000",
-    "ant_eliteColony":   "#2B7541",
+    "ga":             "#E63946",
+    "christofides":   "#2ECC71",
+    "aco_routing":    "#FF9800",
+    "gerald_sa":      "#D81B60",
+    "particle_swarm": "#2196F3",
+    "antColony_elite":"#000000",
 }
 
 
@@ -195,7 +189,7 @@ select:focus{border-color:#e63946}
     <div class="stat"><span class="stat-val" id="s-gen">—</span><span class="stat-lbl">Gen</span></div>
     <div class="stat"><span class="stat-val" id="s-time">—</span><span class="stat-lbl">GA Best (min)</span></div>
     <div class="stat"><span class="stat-val" id="s-impr">—</span><span class="stat-lbl">Improved</span></div>
-    <div class="stat" id="stat-ref-wrap"><span class="stat-val" id="s-ref">—</span><span class="stat-lbl">Dijkstra (min)</span></div>
+    <div class="stat" id="stat-ref-wrap"><span class="stat-val" id="s-ref">—</span><span class="stat-lbl">Best Baseline (min)</span></div>
     <div class="stat"><span class="stat-val" id="s-total">—</span><span class="stat-lbl">Total Gens</span></div>
   </div>
 </div>
@@ -212,11 +206,14 @@ select:focus{border-color:#e63946}
   <div class="speed-ctrl">
     <label>Speed</label>
     <select id="speed-select">
-      <option value="2500">Very Slow</option>
-      <option value="1500" selected>Slow</option>
-      <option value="700">Normal</option>
-      <option value="220">Fast</option>
-      <option value="50">Turbo</option>
+      <option value="60000">1 menit / gen</option>
+      <option value="30000">30 detik / gen</option>
+      <option value="15000">15 detik / gen</option>
+      <option value="10000" selected>10 detik / gen</option>
+      <option value="5000">5 detik / gen</option>
+      <option value="3000">3 detik / gen</option>
+      <option value="1000">1 detik / gen</option>
+      <option value="200">Cepat</option>
     </select>
   </div>
   <div class="speed-ctrl">
@@ -364,7 +361,7 @@ function renderGARoute(algoName, genIdx, weight, opacity){
   gaLayers[algoName]=gaPl;
   // animate line draw — duration scales with playback speed so fast/turbo still feel snappy
   const speedMs=parseInt(speedSel.value,10);
-  animatePath(gaPl, Math.round(speedMs*0.80));
+  animatePath(gaPl, Math.round(speedMs*0.90));
 }
 
 // ── Render static baseline route ─────────────────────────────
@@ -447,7 +444,9 @@ function renderGen(genIdx){
       if(f.min<bestMin){bestMin=f.min;bestDist=f.dist;bestAlgo=a;}
     });
     const totalGens=maxGenAll();
-    const refData=(DATA.baselines['dijkstra_time']||{})[sc];
+    // Use the fastest available baseline as the reference comparison line
+    const refAlgo=Object.keys(DATA.baselines||{}).reduce((best,a)=>{ const d=(DATA.baselines[a]||{})[sc]; return (d&&(!best||d.min<(DATA.baselines[best]||{})[sc]?.min))?a:best; },null);
+    const refData=refAlgo?(DATA.baselines[refAlgo]||{})[sc]:null;
     const firstMins=Object.keys(DATA.algorithms).map(a=>{
       const h=getHistory(a); return h.length?h[0].min:Infinity;
     });
@@ -465,7 +464,9 @@ function renderGen(genIdx){
 
   } else {
     // Single algorithm mode
-    const refData=(DATA.baselines['dijkstra_time']||{})[sc];
+    // Use the fastest available baseline as the reference comparison line
+    const refAlgo=Object.keys(DATA.baselines||{}).reduce((best,a)=>{ const d=(DATA.baselines[a]||{})[sc]; return (d&&(!best||d.min<(DATA.baselines[best]||{})[sc]?.min))?a:best; },null);
+    const refData=refAlgo?(DATA.baselines[refAlgo]||{})[sc]:null;
     if(isGAAlgo(algo)){
       renderGARoute(algo,genIdx,5,.92);
       const hist=getHistory(algo);

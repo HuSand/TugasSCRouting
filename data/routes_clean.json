@@ -1,0 +1,563 @@
+{
+  "generated_from": "src.routing.benchmark.build_category_scenarios",
+  "route_count": 2,
+  "routes": [
+    {
+      "name": "emergency_patrol_circuit",
+      "description": "50-stop sirkuit patroli darurat (polisi + pemadam kebakaran) — coverage seluruh Surabaya. Insight: konektivitas jaringan darurat, waktu tempuh antar pos, dan identifikasi area dengan gap coverage layanan darurat.",
+      "stop_count": 50,
+      "round_trip": true,
+      "optimize_order": false,
+      "stops": [
+        {
+          "order_index": 1,
+          "label": "Polsek Benowo",
+          "node_id": 5539027568,
+          "lat": -7.235878,
+          "lon": 112.6075931
+        },
+        {
+          "order_index": 2,
+          "label": "Dinas Pemadam Kebakaran UPTD Surabaya V Pos Pakal",
+          "node_id": 6935515705,
+          "lat": -7.24029285,
+          "lon": 112.62541
+        },
+        {
+          "order_index": 3,
+          "label": "Dinas Pemadam Kebakaran Kandangan",
+          "node_id": 1721971962,
+          "lat": -7.2522766,
+          "lon": 112.6531946
+        },
+        {
+          "order_index": 4,
+          "label": "Polsek Lakarsantri",
+          "node_id": 5560770343,
+          "lat": -7.276275393569879,
+          "lon": 112.63784737218799
+        },
+        {
+          "order_index": 5,
+          "label": "police",
+          "node_id": 2295742361,
+          "lat": -7.2822742,
+          "lon": 112.6580057
+        },
+        {
+          "order_index": 6,
+          "label": "Polsek Tandes",
+          "node_id": 2844495228,
+          "lat": -7.2765575803398885,
+          "lon": 112.68400486529717
+        },
+        {
+          "order_index": 7,
+          "label": "Polsek Sukomanunggal",
+          "node_id": 1720799149,
+          "lat": -7.268918,
+          "lon": 112.6992024
+        },
+        {
+          "order_index": 8,
+          "label": "Polsek Tandes Pos Lalu Lintas",
+          "node_id": 6937883797,
+          "lat": -7.259596021673638,
+          "lon": 112.68898219104337
+        },
+        {
+          "order_index": 9,
+          "label": "Polsek Sawahan",
+          "node_id": 1685005024,
+          "lat": -7.255500444181231,
+          "lon": 112.71605833487662
+        },
+        {
+          "order_index": 10,
+          "label": "Pos Polisi Loak",
+          "node_id": 420414515,
+          "lat": -7.2447399,
+          "lon": 112.7144478
+        },
+        {
+          "order_index": 11,
+          "label": "Polsek Krembangan",
+          "node_id": 1721894958,
+          "lat": -7.2302688,
+          "lon": 112.71024155000002
+        },
+        {
+          "order_index": 12,
+          "label": "Satpas Colombo SIM",
+          "node_id": 9155063211,
+          "lat": -7.228452366160578,
+          "lon": 112.72852137171975
+        },
+        {
+          "order_index": 13,
+          "label": "Pos Pantau Kebalen Timur",
+          "node_id": 1722231105,
+          "lat": -7.2281319,
+          "lon": 112.73593185
+        },
+        {
+          "order_index": 14,
+          "label": "Polsek Kecamatan Semampir",
+          "node_id": 3659690397,
+          "lat": -7.225924458411627,
+          "lon": 112.7458287999206
+        },
+        {
+          "order_index": 15,
+          "label": "Polsek Simokerto",
+          "node_id": 4503429445,
+          "lat": -7.238245165025451,
+          "lon": 112.74657973853782
+        },
+        {
+          "order_index": 16,
+          "label": "Dinas Kebakaran Kota Surabaya",
+          "node_id": 3639627242,
+          "lat": -7.244997064505694,
+          "lon": 112.73637354168183
+        },
+        {
+          "order_index": 17,
+          "label": "Pos polisi",
+          "node_id": 3750494985,
+          "lat": -7.255988757412918,
+          "lon": 112.73725996108722
+        },
+        {
+          "order_index": 18,
+          "label": "Kantor Polisi Sektor Tegalsari",
+          "node_id": 10941183276,
+          "lat": -7.265667111174086,
+          "lon": 112.74066115597644
+        },
+        {
+          "order_index": 19,
+          "label": "Kantor Polsek Tegalsari Pos Keputran",
+          "node_id": 5582000861,
+          "lat": -7.274031969375447,
+          "lon": 112.74364774412234
+        },
+        {
+          "order_index": 20,
+          "label": "Pos Lantas Polsek Tegalsari",
+          "node_id": 270613457,
+          "lat": -7.274151740800455,
+          "lon": 112.72731871665667
+        },
+        {
+          "order_index": 21,
+          "label": "Polsek Dukuh Pakis",
+          "node_id": 5587848960,
+          "lat": -7.281475553687444,
+          "lon": 112.71110726974622
+        },
+        {
+          "order_index": 22,
+          "label": "Badan Kesatuan Bangsa dan Politik",
+          "node_id": 4280746460,
+          "lat": -7.290031126068632,
+          "lon": 112.70316100220367
+        },
+        {
+          "order_index": 23,
+          "label": "Pemadam Kebakaran Surabaya IV",
+          "node_id": 3201036602,
+          "lat": -7.3142808,
+          "lon": 112.6958416
+        },
+        {
+          "order_index": 24,
+          "label": "Polisi Sektor Karang Pilang",
+          "node_id": 886342457,
+          "lat": -7.3164404,
+          "lon": 112.7099192
+        },
+        {
+          "order_index": 25,
+          "label": "Dinas Kebakaran Pos Jambangan",
+          "node_id": 4481220742,
+          "lat": -7.322081994039676,
+          "lon": 112.71376191403876
+        },
+        {
+          "order_index": 26,
+          "label": "Polsek Jambangan",
+          "node_id": 5582027194,
+          "lat": -7.3132348787264405,
+          "lon": 112.71829982860105
+        },
+        {
+          "order_index": 27,
+          "label": "Subid Tekkom Polda Jatim",
+          "node_id": 1722907691,
+          "lat": -7.312406568946559,
+          "lon": 112.73203877029894
+        },
+        {
+          "order_index": 28,
+          "label": "Pos Polisi Dolog",
+          "node_id": 5603405155,
+          "lat": -7.3263051070671406,
+          "lon": 112.73183975218187
+        },
+        {
+          "order_index": 29,
+          "label": "POLRI Daerah Jawa Timur (Resor Kota Besar Surabaya)",
+          "node_id": 1517895718,
+          "lat": -7.332707124096461,
+          "lon": 112.72353694634583
+        },
+        {
+          "order_index": 30,
+          "label": "Dinas Kebakaran UPTD 3 Surabaya",
+          "node_id": 2305809718,
+          "lat": -7.336707190591737,
+          "lon": 112.75407082086973
+        },
+        {
+          "order_index": 31,
+          "label": "POLOSEK RUNGKUT",
+          "node_id": 4574365996,
+          "lat": -7.338419652207644,
+          "lon": 112.7711567767638
+        },
+        {
+          "order_index": 32,
+          "label": "Dinas Pemadam Kebakaran Pos Kali Rungkut",
+          "node_id": 3164668205,
+          "lat": -7.3221482,
+          "lon": 112.7699985
+        },
+        {
+          "order_index": 33,
+          "label": "Polsek Wonocolo",
+          "node_id": 1719471192,
+          "lat": -7.315942808909819,
+          "lon": 112.75292354735608
+        },
+        {
+          "order_index": 34,
+          "label": "Kantor Kepolisian Sektor Gubeng",
+          "node_id": 4332971625,
+          "lat": -7.297702370578916,
+          "lon": 112.76132841157356
+        },
+        {
+          "order_index": 35,
+          "label": "Satuan Brimob Kapolda Jatim",
+          "node_id": 9577181872,
+          "lat": -7.301387975623612,
+          "lon": 112.77087853916522
+        },
+        {
+          "order_index": 36,
+          "label": "POLSEK SUKOLILO",
+          "node_id": 4332874782,
+          "lat": -7.2854189432924565,
+          "lon": 112.78156952856682
+        },
+        {
+          "order_index": 37,
+          "label": "Satlantas Polrestabes Surabaya",
+          "node_id": 839732269,
+          "lat": -7.27910535,
+          "lon": 112.76319225
+        },
+        {
+          "order_index": 38,
+          "label": "POLSEK TAMBAK SARI",
+          "node_id": 5587405714,
+          "lat": -7.25743914539122,
+          "lon": 112.7554077395423
+        },
+        {
+          "order_index": 39,
+          "label": "Kepolisian Sektor Genteng",
+          "node_id": 5589485735,
+          "lat": -7.2556109,
+          "lon": 112.7483715
+        },
+        {
+          "order_index": 40,
+          "label": "Pos Polisi Tambakrejo",
+          "node_id": 3276242811,
+          "lat": -7.248990964549892,
+          "lon": 112.75552818619047
+        },
+        {
+          "order_index": 41,
+          "label": "Dinas Kebakaran UPTD II Surabaya Utara Tambak Rejo",
+          "node_id": 1687579276,
+          "lat": -7.243072802253487,
+          "lon": 112.7597225240691
+        },
+        {
+          "order_index": 42,
+          "label": "Pemadam Kebakaran Kecamatan Bulak",
+          "node_id": 4617826832,
+          "lat": -7.231830993886886,
+          "lon": 112.78545897830205
+        },
+        {
+          "order_index": 43,
+          "label": "Pos Polantas Suramadu",
+          "node_id": 3279314259,
+          "lat": -7.2169460872253435,
+          "lon": 112.77761507811309
+        },
+        {
+          "order_index": 44,
+          "label": "Kepolisian Sektor Mulyorejo",
+          "node_id": 4646599596,
+          "lat": -7.258611401437096,
+          "lon": 112.79260175382775
+        },
+        {
+          "order_index": 45,
+          "label": "Pos Pembantu Pemadam Kebakaran Kota Surabaya",
+          "node_id": 1722835627,
+          "lat": -7.29527622618414,
+          "lon": 112.80172946081507
+        },
+        {
+          "order_index": 46,
+          "label": "Polsek Wonokromo",
+          "node_id": 3733180908,
+          "lat": -7.2987147618047565,
+          "lon": 112.73719008548842
+        },
+        {
+          "order_index": 47,
+          "label": "Pos Pembantu Pemadam Kebakaran",
+          "node_id": 5621072522,
+          "lat": -7.34044515,
+          "lon": 112.66602185
+        },
+        {
+          "order_index": 48,
+          "label": "Posko Pemadam Kebakaran",
+          "node_id": 2294254755,
+          "lat": -7.303572910730212,
+          "lon": 112.63290562159119
+        },
+        {
+          "order_index": 49,
+          "label": "Kantor Kepolisian Jawa Timur Direktorat Kepolisian Perairan",
+          "node_id": 5532374253,
+          "lat": -7.208499771740105,
+          "lon": 112.73090251779288
+        },
+        {
+          "order_index": 50,
+          "label": "Polres Pelabuhan Tanjung Perak",
+          "node_id": 1507762970,
+          "lat": -7.199791716927256,
+          "lon": 112.73396838929351
+        }
+      ]
+    },
+    {
+      "name": "terminal_circuit",
+      "description": "27-stop sirkuit terminal transportasi (terminal bus + feri + SPBU) — seluruh jaringan transportasi publik Surabaya. Insight: aksesibilitas terminal, waktu sirkuit inspeksi, dan bottleneck koneksi antar hub transportasi.",
+      "stop_count": 27,
+      "round_trip": true,
+      "optimize_order": false,
+      "stops": [
+        {
+          "order_index": 1,
+          "label": "Terminal Intermoda Joyoboyo",
+          "node_id": 8148987377,
+          "lat": -7.298926101785703,
+          "lon": 112.73647112974317
+        },
+        {
+          "order_index": 2,
+          "label": "Cititrans - Surabaya",
+          "node_id": 1685220072,
+          "lat": -7.2793037,
+          "lon": 112.7393293
+        },
+        {
+          "order_index": 3,
+          "label": "BP",
+          "node_id": 7229412728,
+          "lat": -7.2654852,
+          "lon": 112.7472246
+        },
+        {
+          "order_index": 4,
+          "label": "Taman Prestasi",
+          "node_id": 1682373505,
+          "lat": -7.2623101,
+          "lon": 112.7436009
+        },
+        {
+          "order_index": 5,
+          "label": "Taman Ekspresi",
+          "node_id": 421210769,
+          "lat": -7.2564245,
+          "lon": 112.7436734
+        },
+        {
+          "order_index": 6,
+          "label": "Pertamina",
+          "node_id": 3207375195,
+          "lat": -7.2634443,
+          "lon": 112.7521186
+        },
+        {
+          "order_index": 7,
+          "label": "SPBU Pertamina Ploso Baru Sidoarjo",
+          "node_id": 1687583444,
+          "lat": -7.2585852,
+          "lon": 112.7738642
+        },
+        {
+          "order_index": 8,
+          "label": "Pemberhentian Bus Flash UNAIR",
+          "node_id": 6417155816,
+          "lat": -7.2663855,
+          "lon": 112.7851661
+        },
+        {
+          "order_index": 9,
+          "label": "Terminal Kenjeran",
+          "node_id": 5558632177,
+          "lat": -7.240564116146276,
+          "lon": 112.7945523736387
+        },
+        {
+          "order_index": 10,
+          "label": "Terminal Kedung Cowek",
+          "node_id": 12749589292,
+          "lat": -7.212769859090199,
+          "lon": 112.7793119290785
+        },
+        {
+          "order_index": 11,
+          "label": "Terminal Kalimas Barat",
+          "node_id": 1510862945,
+          "lat": -7.223189767536678,
+          "lon": 112.73783678913561
+        },
+        {
+          "order_index": 12,
+          "label": "Stasiun Kalimas",
+          "node_id": 1722448632,
+          "lat": -7.2210357,
+          "lon": 112.7346335
+        },
+        {
+          "order_index": 13,
+          "label": "Terminal Kasuari",
+          "node_id": 4514781746,
+          "lat": -7.2354104,
+          "lon": 112.7363327
+        },
+        {
+          "order_index": 14,
+          "label": "SPBU Pertamina Stasiun Kota 5460144",
+          "node_id": 1091081749,
+          "lat": -7.2425279,
+          "lon": 112.7397892
+        },
+        {
+          "order_index": 15,
+          "label": "Ujung Baru",
+          "node_id": 10128951900,
+          "lat": -7.198911810329608,
+          "lon": 112.73455050293448
+        },
+        {
+          "order_index": 16,
+          "label": "Surabaya D2",
+          "node_id": 3236193768,
+          "lat": -7.1978389,
+          "lon": 112.7348462
+        },
+        {
+          "order_index": 17,
+          "label": "Terminal Penumpang Pelabuhan Tanjung Perak",
+          "node_id": 3236193792,
+          "lat": -7.196980698198658,
+          "lon": 112.73145622012427
+        },
+        {
+          "order_index": 18,
+          "label": "Terminal Tambak Osowilangon",
+          "node_id": 3734510020,
+          "lat": -7.2181752897860445,
+          "lon": 112.65334064028258
+        },
+        {
+          "order_index": 19,
+          "label": "Pertamina 54.601.73",
+          "node_id": 4561120907,
+          "lat": -7.236941342349202,
+          "lon": 112.61868173166145
+        },
+        {
+          "order_index": 20,
+          "label": "Terminal Benowo",
+          "node_id": 5539027566,
+          "lat": -7.235590393533228,
+          "lon": 112.60787997852128
+        },
+        {
+          "order_index": 21,
+          "label": "Terminal Manukan",
+          "node_id": 1721121122,
+          "lat": -7.268143,
+          "lon": 112.66670555000002
+        },
+        {
+          "order_index": 22,
+          "label": "Terminal Balongsari",
+          "node_id": 5575191613,
+          "lat": -7.25923645,
+          "lon": 112.67866515
+        },
+        {
+          "order_index": 23,
+          "label": "Shell",
+          "node_id": 9625659346,
+          "lat": -7.2915588,
+          "lon": 112.6757492
+        },
+        {
+          "order_index": 24,
+          "label": "Terminal Dukuh Kupang",
+          "node_id": 5587848959,
+          "lat": -7.281387797053012,
+          "lon": 112.71197478017369
+        },
+        {
+          "order_index": 25,
+          "label": "Terminal Bratang",
+          "node_id": 1685222293,
+          "lat": -7.298877395574341,
+          "lon": 112.7615634437541
+        },
+        {
+          "order_index": 26,
+          "label": "Terminal Keputih",
+          "node_id": 6618556560,
+          "lat": -7.294602775108862,
+          "lon": 112.80183332839387
+        },
+        {
+          "order_index": 27,
+          "label": "Terminal Menanggal",
+          "node_id": 1722953458,
+          "lat": -7.341582789813884,
+          "lon": 112.72255115094731
+        }
+      ]
+    }
+  ]
+}

@@ -116,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable writing logs to file",
     )
+    parser.add_argument(
+        "--parallel-legs",
+        action="store_true",
+        help="Enable leg-level parallelism in benchmark (more CPU cores, higher RAM usage)",
+    )
     return parser
 
 
@@ -131,6 +136,7 @@ def main():
     cfg = Settings()
     if args.no_log_file:
         cfg.LOG_TO_FILE = False
+    cfg.PARALLEL_LEGS = args.parallel_legs
 
     log = setup_logging(cfg)
     log.info("Surabaya Public Facility Routing Platform")

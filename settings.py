@@ -38,7 +38,7 @@ class Settings:
     # ------------------------------------------------------------------
     # Benchmark
     # ------------------------------------------------------------------
-    N_SCENARIOS              = 5     # how many source→target pairs to test
+    N_SCENARIOS              = 2     # two focused scenarios: emergency + terminal
     N_COVERAGE_SAMPLES       = 100   # random points for coverage analysis
     MAX_FACILITIES_PER_CAT   = 50    # cap per category (keeps coverage fast)
 

@@ -1,30 +1,28 @@
 """
 ════════════════════════════════════════════════════════════════
- TEAM ALGORITHM FILE
- Add your routing algorithms here.
+ ROUTING ALGORITHMS
+ All algorithm implementations live here.
+ Register each one at the bottom of this file via REGISTRY.register().
 ════════════════════════════════════════════════════════════════
 
-HOW TO ADD YOUR ALGORITHM
+HOW TO ADD A NEW ALGORITHM
 --------------------------
-1.  Copy the skeleton at the bottom of this file.
-2.  Give it a unique `name` and `description`.
-3.  Write your routing logic inside `find_route`.
-4.  Register it at the bottom: REGISTRY.register(YourAlgorithm())
-5.  Run:  python main.py compare
+1. Subclass BaseRoutingAlgorithm.
+2. Set a unique `name` and `description`.
+3. Implement find_route() — or add _route_multi_stop() for TSP-aware routing.
+4. Register: REGISTRY.register(YourAlgorithm())
+5. Run: python main.py compare
 
-Your algorithm will automatically appear in the benchmark results,
-comparison map, and charts — no other file needs to change.
-
-WHAT YOU HAVE ACCESS TO
+GRAPH ACCESS REFERENCE
 -----------------------
 G            : NetworkX MultiDiGraph of the Surabaya road network.
                Nodes are road intersections (int IDs).
-               Edges have attributes:
+               Edges have:
                  length        (float)  metres
                  travel_time   (float)  seconds
                  speed_kph     (float)  km/h
                  highway       (str)    OSM road type
-               Access: G.get_edge_data(u, v) → dict of edges
+               Access: G.get_edge_data(u, v) → dict of parallel edges
 
 source_node  : int — starting node ID
 target_node  : int — destination node ID
@@ -33,152 +31,47 @@ G.nodes[n]   : dict with 'x' (lon) and 'y' (lat) for node n
 Useful NetworkX functions:
   nx.shortest_path(G, src, dst, weight="travel_time")
   nx.shortest_path_length(G, src, dst, weight="travel_time")
-  nx.astar_path(G, src, dst, heuristic=fn, weight="travel_time")
-  list(G.predecessors(n))   — incoming neighbours
+  nx.single_source_dijkstra_path_length(G, src, weight="travel_time")
   list(G.successors(n))     — outgoing neighbours
+  list(G.predecessors(n))   — incoming neighbours
 
 Return RouteResult.build(...) on success.
 Return RouteResult.failure(...) on no-path or exception.
 ════════════════════════════════════════════════════════════════
 """
 
+import logging
 import time
 import math
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import networkx as nx
 
 from src.routing.base import BaseRoutingAlgorithm, RouteResult, Scenario
 
-
-# ──────────────────────────────────────────────────────────────
-# Built-in Baselines
-# (do not remove — used as reference lines in comparisons)
-# used as comparison algorithm to AStar(GA Algorithm)
-# ──────────────────────────────────────────────────────────────
-
-class DijkstraTime(BaseRoutingAlgorithm):
-    """Dijkstra minimising travel time. Standard fastest-route baseline."""
-    name        = "dijkstra_time"
-    description = "Dijkstra — minimise travel time (fastest route)"
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0 = time.perf_counter()
-        try:
-            route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
+log = logging.getLogger(__name__)
 
 
-class DijkstraDistance(BaseRoutingAlgorithm):
-    """Dijkstra minimising physical distance. Shortest-path baseline."""
-    name        = "dijkstra_distance"
-    description = "Dijkstra — minimise distance in metres (shortest path)"
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0 = time.perf_counter()
-        try:
-            route = nx.shortest_path(G, source_node, target_node, weight="length")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
-
-# ──────────────────────────────────────────────────────────────
-# Built-in Baselines
-# (do not remove — used as lines in comparisons)
-# ──────────────────────────────────────────────────────────────
-class AStarTime(BaseRoutingAlgorithm):
-    """
-    A* with straight-line (haversine) heuristic, minimising travel time.
-    Typically faster than Dijkstra on large graphs — useful speed comparison.
-    """
-    name        = "astar_time"
-    description = "A* — minimise travel time with haversine heuristic"
-
-    @staticmethod
-    def _heuristic(u, v, G):
-        """Straight-line travel time estimate (haversine / avg speed)."""
-        try:
-            nu, nv = G.nodes[u], G.nodes[v]
-            lat1, lon1 = math.radians(nu["y"]), math.radians(nu["x"])
-            lat2, lon2 = math.radians(nv["y"]), math.radians(nv["x"])
-            dlat, dlon = lat2 - lat1, lon2 - lon1
-            a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
-            dist_m = 2 * 6_371_000 * math.asin(math.sqrt(a))
-            avg_speed_ms = 30 / 3.6   # conservative 30 km/h
-            return dist_m / avg_speed_ms
-        except Exception:
-            return 0.0
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0 = time.perf_counter()
-        try:
-            route = nx.astar_path(
-                G, source_node, target_node,
-                heuristic=lambda u, v: self._heuristic(u, v, G),
-                weight="travel_time",
-            )
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
-
-# ──────────────────────────────────────────────────────────────
-class AStarDistance(BaseRoutingAlgorithm):
-    """
-    A* with straight-line (haversine) heuristic, minimising physical distance.
-    Direct comparison for DijkstraDistance, usually with fewer graph expansions.
-    """
-    name        = "astar_distance"
-    description = "A* — minimise distance in metres with haversine heuristic"
-
-    @staticmethod
-    def _heuristic(u, v, G):
-        """Straight-line distance estimate in metres."""
-        try:
-            nu, nv = G.nodes[u], G.nodes[v]
-            lat1, lon1 = math.radians(nu["y"]), math.radians(nu["x"])
-            lat2, lon2 = math.radians(nv["y"]), math.radians(nv["x"])
-            dlat, dlon = lat2 - lat1, lon2 - lon1
-            a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
-            return 2 * 6_371_000 * math.asin(math.sqrt(a))
-        except Exception:
-            return 0.0
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0 = time.perf_counter()
-        try:
-            route = nx.astar_path(
-                G, source_node, target_node,
-                heuristic=lambda u, v: self._heuristic(u, v, G),
-                weight="length",
-            )
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms)
-
-
-
-# ──────────────────────────────────────────────────────────────
-# GA SHARED HELPERS
-# Dipakai oleh semua GA (Sandy, Burhan, Bimo, Gerald).
-# Jangan diubah — kalau mau custom, override di class masing-masing.
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# SECTION 1: GA SHARED HELPERS
+#
+# These utility functions are used by GeneticAlgorithm for
+# point-to-point (single-leg) path optimisation.
+# They operate on lists of road-network node IDs.
+# ══════════════════════════════════════════════════════════════════
 
 def _route_streets(G, path: list) -> list:
-    """Deduplicated street names for a path (same logic as visualize.py)."""
+    """
+    Extract a deduplicated list of street names traversed by a path.
+    Consecutive repeated names are collapsed to one entry.
+    Used for evolution logs and map tooltips.
+    """
     streets, prev = [], None
     for u, v in zip(path[:-1], path[1:]):
         data = G.get_edge_data(u, v)
         if not data:
             continue
+        # Pick the fastest parallel edge between u and v
         best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
         name = best.get("name") or best.get("highway") or "unnamed"
         if isinstance(name, list):
@@ -191,7 +84,11 @@ def _route_streets(G, path: list) -> list:
 
 
 def _ga_path_cost(G, path: list) -> float:
-    """Total travel_time sepanjang path (lower = better)."""
+    """
+    Total travel_time (seconds) along a path.
+    When an edge is missing (disconnected path), returns infinity
+    so the path is ranked last in selection.
+    """
     total = 0.0
     for u, v in zip(path[:-1], path[1:]):
         data = G.get_edge_data(u, v)
@@ -203,7 +100,7 @@ def _ga_path_cost(G, path: list) -> float:
 
 
 def _ga_path_distance(G, path: list) -> float:
-    """Total distance sepanjang path dalam meter."""
+    """Total physical distance (metres) along a path."""
     total = 0.0
     for u, v in zip(path[:-1], path[1:]):
         data = G.get_edge_data(u, v)
@@ -216,13 +113,16 @@ def _ga_path_distance(G, path: list) -> float:
 
 def _ga_random_path(G, source: int, target: int, rng: random.Random):
     """
-    Hasilkan 1 path dengan Dijkstra + noise acak pada bobot edge.
-    Beda seed → beda path → populasi awal jadi beragam.
+    Generate one candidate path using Dijkstra with randomised edge weights.
+
+    By adding ±30-50% noise to travel_time weights, each call produces a
+    different valid path. Running this N times gives a diverse initial
+    population covering different road corridors.
     """
     def noisy_weight(u, v, data):
         best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
         t = float(best.get("travel_time", 9999))
-        return t * rng.uniform(0.7, 1.5)   # noise 70%-150%
+        return t * rng.uniform(0.7, 1.5)   # ±30-50% noise
 
     try:
         return nx.shortest_path(G, source, target, weight=noisy_weight)
@@ -232,13 +132,17 @@ def _ga_random_path(G, source: int, target: int, rng: random.Random):
 
 def _ga_crossover(p1: list, p2: list, rng: random.Random) -> list:
     """
-    Common-node crossover:
-      cari node tengah yang ada di kedua parent,
-      ambil p1[:pivot] + p2[pivot:].
-    Kalau tidak ada node bersama, kembalikan kopi p1.
+    Common-node crossover for road-network paths.
+
+    Find a road intersection that appears in both parent paths (a "pivot"),
+    then combine the first half of p1 up to the pivot with the second half
+    of p2 from the pivot onwards. If no common node exists, return a copy of p1.
+
+    This is analogous to single-point crossover in classical GA, but adapted
+    to the constraint that paths must stay connected on the road graph.
     """
-    set1 = set(p1[1:-1])          # exclude source & target
-    common = [n for n in p2[1:-1] if n in set1]
+    set1 = set(p1[1:-1])                           # intermediate nodes of p1
+    common = [n for n in p2[1:-1] if n in set1]    # shared intersections
     if not common:
         return p1[:]
     pivot = rng.choice(common)
@@ -249,9 +153,11 @@ def _ga_crossover(p1: list, p2: list, rng: random.Random) -> list:
 
 def _ga_mutate(G, path: list, rng: random.Random) -> list:
     """
-    Mutasi: pilih dua node acak dalam path,
-    ganti sub-segmen di antaranya dengan shortest path baru.
-    Efek: 'jalan pintas' baru yang mungkin lebih efisien.
+    Segment re-route mutation.
+
+    Pick two random nodes within the path, then replace the road segment
+    between them with a fresh shortest-path computation. This injects
+    new road corridors into the population and prevents stagnation.
     """
     if len(path) < 3:
         return path
@@ -261,85 +167,50 @@ def _ga_mutate(G, path: list, rng: random.Random) -> list:
         seg = nx.shortest_path(G, path[i], path[j], weight="travel_time")
         return path[:i] + seg + path[j + 1:]
     except (nx.NetworkXNoPath, nx.NodeNotFound):
-        return path
+        return path     # mutation failed — keep original
 
 
 def _ga_tournament(population: list, fitness: list,
                    k: int, rng: random.Random) -> list:
-    """Pilih 1 individu terbaik dari k kandidat acak (tournament selection)."""
+    """
+    Tournament selection: draw k candidates at random, return the fittest one.
+
+    A higher k means stronger selection pressure (better individuals win more
+    often). Too high a k can cause premature convergence; too low reduces
+    directed improvement.
+    """
     candidates = rng.sample(range(len(population)), min(k, len(population)))
     winner_idx = min(candidates, key=lambda i: fitness[i])
     return population[winner_idx]
 
 
-def _sa_noisy_shortest_path(G, source: int, target: int,
-                            rng: random.Random, noise_min=0.85, noise_max=1.35):
-    """
-    Hasilkan kandidat rute untuk SA dengan Dijkstra berbobot length + noise.
-    Fokusnya shortest path, jadi objective dasarnya jarak fisik, bukan waktu.
-    """
-    def noisy_length(u, v, data):
-        best = min(data.values(), key=lambda d: float(d.get("length", 999999)))
-        dist = float(best.get("length", 999999))
-        return dist * rng.uniform(noise_min, noise_max)
-
-    try:
-        return nx.shortest_path(G, source, target, weight=noisy_length)
-    except (nx.NetworkXNoPath, nx.NodeNotFound):
-        return None
-
-
-def _sa_neighbor_path(G, path: list, rng: random.Random) -> list:
-    """
-    Tetangga SA: pilih sub-rute acak, lalu cari penggantinya dengan
-    shortest path bernoise supaya eksplorasi tetap valid di graph jalan.
-    """
-    if len(path) < 3:
-        return path[:]
-
-    i = rng.randint(0, len(path) - 2)
-    max_span = max(2, len(path) // 3)
-    j = rng.randint(i + 1, min(i + max_span, len(path) - 1))
-    segment = _sa_noisy_shortest_path(
-        G, path[i], path[j], rng, noise_min=0.75, noise_max=1.45
-    )
-    if not segment:
-        return path[:]
-    return path[:i] + segment + path[j + 1:]
-
-
-# ──────────────────────────────────────────────────────────────
-# INDIVIDUAL GA SLOTS
-# Sandy  : DONE  -- populasi dan cross-over rate tinggi
-# Burhan : TODO  -- isi TUNING ZONE kamu
-# Bimo   : TODO  -- isi TUNING ZONE kamu
-# Gerald : TODO  -- isi TUNING ZONE kamu
-#
-# Yang perlu diubah per orang: HANYA blok TUNING ZONE.
-# Kalau mau lebih advanced, boleh override _crossover/_mutate.
-# Jangan ubah find_route kecuali kamu tau yang kamu lakukan.
-# ──────────────────────────────────────────────────────────────
-
 def _ga_run(algo, G, source_node, target_node, scenario_name):
     """
-    Shared GA loop — dipakai semua slot supaya tidak duplikat kode.
-    Dipanggil dari find_route masing-masing class.
+    Core GA loop for point-to-point (single-leg) path optimisation.
+
+    Shared by GeneticAlgorithm.find_route() for simple A→B routing.
+    The algo object supplies hyperparameters and _fitness / _crossover / _mutate.
+
+    Flow:
+      1. Build a diverse initial population via noisy-Dijkstra.
+      2. For each generation: evaluate fitness, select, cross, mutate.
+      3. Carry the generation's elite forward (elitism = 1).
+      4. Return the best path found, with per-generation history.
     """
     t0  = time.perf_counter()
     rng = random.Random(algo.RANDOM_SEED)
 
-    # 1. Populasi awal
+    # ── 1. Initial population ─────────────────────────────────────────────
     population = []
     for _ in range(algo.POPULATION_SIZE):
         p = _ga_random_path(G, source_node, target_node, rng)
         if p:
             population.append(p)
 
-    # Fallback jika graph terlalu sparse
+    # If the graph is too sparse to generate any valid path, fall back to Dijkstra
     if not population:
         try:
-            route = nx.shortest_path(G, source_node, target_node,
-                                     weight="travel_time")
+            route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
         except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
             ms = (time.perf_counter() - t0) * 1000
             return RouteResult.failure(algo.name, scenario_name,
@@ -348,15 +219,15 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
         return RouteResult.build(G, algo.name, scenario_name,
                                  source_node, target_node, route, ms)
 
-    # 2. Evolusi
+    # ── 2. Generational evolution ─────────────────────────────────────────
     gen_history = []
     for gen_idx in range(algo.GENERATIONS):
-        # Gunakan _fitness() milik masing-masing algo — ini yang membedakan tiap orang
+        # Evaluate fitness for every individual in the population
         fitness  = [algo._fitness(G, p) for p in population]
         best_idx = min(range(len(population)), key=lambda i: fitness[i])
-        elite    = population[best_idx]
+        elite    = population[best_idx]   # best individual is carried to next gen
 
-        # Rekam koordinat + nama jalan rute terbaik generasi ini
+        # Record coordinates and street names of the best path this generation
         coords = []
         for n in elite:
             node = G.nodes.get(n)
@@ -365,13 +236,14 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
                                 round(float(node["x"]), 5)])
         gen_history.append({
             "gen":     gen_idx + 1,
-            "min":     round(_ga_path_cost(G, elite) / 60, 3),  # selalu tampilkan travel_time asli
-            "dist":    round(_ga_path_distance(G, elite) / 1000, 3),
+            "min":     round(_ga_path_cost(G, elite) / 60, 3),   # minutes
+            "dist":    round(_ga_path_distance(G, elite) / 1000, 3),  # km
             "coords":  coords,
             "streets": _route_streets(G, elite),
         })
 
-        new_pop = [elite]
+        # Build next generation
+        new_pop = [elite]   # elitism: best always survives unchanged
         while len(new_pop) < algo.POPULATION_SIZE:
             p1 = _ga_tournament(population, fitness, algo.TOURNAMENT_SIZE, rng)
             if rng.random() < algo.CROSSOVER_RATE:
@@ -384,7 +256,7 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
             new_pop.append(child)
         population = new_pop
 
-    # 3. Return terbaik (pakai _fitness untuk konsistensi)
+    # ── 3. Return the best individual from the final generation ──────────
     fitness = [algo._fitness(G, p) for p in population]
     best    = population[min(range(len(population)), key=lambda i: fitness[i])]
     ms      = (time.perf_counter() - t0) * 1000
@@ -400,205 +272,121 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
     )
 
 
-# ──────────────────────────────────────────────────────────────
-# CHRISTOFIDES ALGORITHM
-# Approximation algorithm untuk TSP pada metric space (complete graph).
-# Dipakai untuk skenario multi-stop; point-to-point tetap aman lewat fallback.
-# ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# SECTION 2: SA SHARED HELPERS
+#
+# Helper functions used by GeraldSimulatedAnnealing.
+# ══════════════════════════════════════════════════════════════════
 
-def _build_metric_closure(G: nx.MultiDiGraph, nodes: list, weight: str = "travel_time") -> tuple:
+def _sa_noisy_shortest_path(G, source: int, target: int,
+                            rng: random.Random,
+                            noise_min: float = 0.85,
+                            noise_max: float = 1.35):
     """
-    Build complete graph dengan edge weights = shortest path antar node.
-    Return (metric_closure, pair_paths) supaya hasil TSP bisa di-expand
-    kembali ke road network asli.
+    Generate a candidate SA path using Dijkstra with noise on edge lengths
+    (not travel_time). The physical-distance objective matches SA's fitness.
     """
-    source_graph = G.to_undirected()
-    closure = nx.Graph()
-    closure.add_nodes_from(nodes)
-    pair_paths = {}
-    
-    for i, src in enumerate(nodes):
-        for dst in nodes[i+1:]:
-            try:
-                path = nx.shortest_path(source_graph, src, dst, weight=weight)
-                path_len = nx.shortest_path_length(source_graph, src, dst, weight=weight)
-                closure.add_edge(src, dst, weight=float(path_len))
-                pair_paths[(src, dst)] = path
-                pair_paths[(dst, src)] = list(reversed(path))
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                # Jika tidak ada, gunakan infinity (tidak akan dipilih)
-                closure.add_edge(src, dst, weight=float("inf"))
-    
-    return closure, pair_paths
+    def noisy_length(u, v, data):
+        best = min(data.values(), key=lambda d: float(d.get("length", 999999)))
+        dist = float(best.get("length", 999999))
+        return dist * rng.uniform(noise_min, noise_max)
+
+    try:
+        return nx.shortest_path(G, source, target, weight=noisy_length)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return None
 
 
-def _christofides_tour(closure: nx.Graph, start_node=None) -> list:
+def _sa_neighbor_path(G, path: list, rng: random.Random) -> list:
     """
-    Christofides algorithm untuk metric TSP.
+    Generate a neighbouring solution for SA by replacing a random sub-segment
+    of the current path with a new noisy shortest-path segment.
 
-    Output berupa urutan node kunjungan. Kalau start_node diberikan,
-    hasil akan diputar agar dimulai dari node tersebut.
-    
-    Catatan: NetworkX menjalankan Christofides di graph lengkap berbobot.
+    The noise ensures the replacement segment is not always identical to
+    the original, providing genuine exploration of nearby solutions.
     """
-    tour = nx.approximation.traveling_salesman_problem(
-        closure,
-        weight="weight",
-        cycle=False,
-        method=nx.approximation.christofides,
+    if len(path) < 3:
+        return path[:]
+
+    i = rng.randint(0, len(path) - 2)
+    max_span = max(2, len(path) // 3)
+    j = rng.randint(i + 1, min(i + max_span, len(path) - 1))
+    segment = _sa_noisy_shortest_path(
+        G, path[i], path[j], rng, noise_min=0.75, noise_max=1.45
     )
-    if tour and tour[0] == tour[-1]:
-        tour = tour[:-1]
-    if start_node in tour:
-        idx = tour.index(start_node)
-        tour = tour[idx:] + tour[:idx]
-    return tour
+    if not segment:
+        return path[:]
+    return path[:i] + segment + path[j + 1:]
 
 
-def _expand_tsp_tour_to_road_path(G: nx.MultiDiGraph, tsp_tour: list, weight: str = "travel_time") -> list:
+# ══════════════════════════════════════════════════════════════════
+# SECTION 3: GENETIC ALGORITHM
+#
+# A Genetic Algorithm that works at two levels:
+#   - Point-to-point (find_route): optimises the road-level path
+#     between two nodes using a population of candidate paths.
+#   - Multi-stop TSP (_route_multi_stop): optimises the *visit order*
+#     of a set of stops, then stitches legs together. The tour always
+#     returns to the starting point (circular route).
+# ══════════════════════════════════════════════════════════════════
+
+class GeneticAlgorithm(BaseRoutingAlgorithm):
     """
-    Expand urutan kunjungan TSP menjadi path nyata di road network.
-    Setiap pasangan node dalam tour dihubungkan dengan shortest path di G.
-    
-    Returns: full path (list of node IDs) dari tsp_tour[0] → ... → tsp_tour[-1].
+    Genetic Algorithm for routing — balanced time + distance fitness.
+
+    Point-to-point mode (find_route):
+      - Each individual is a road-network path from source to target.
+      - Fitness = 50% travel_time + 50% physical_distance (normalised to seconds).
+      - This trades pure speed for a shorter physical route —
+        useful when distance matters as well as time.
+      - Crossover: mid-pivot common-node crossover.
+      - Mutation: random sub-segment re-route.
+
+    Multi-stop TSP mode (_route_multi_stop):
+      - Each individual is a *permutation* of the intermediate stops.
+      - The start node is fixed; the tour ends back at start (circular).
+      - Fitness = total shortest-path travel_time for the full circular tour.
+      - Crossover: Order Crossover (OX) — preserves valid permutations.
+      - Mutation: swap two random stops in the visit order.
+      - Called automatically by the benchmark when len(stops) > 2.
     """
-    if len(tsp_tour) < 2:
-        return tsp_tour
-    
-    full_path = []
-    for src, dst in zip(tsp_tour[:-1], tsp_tour[1:]):
-        leg = nx.shortest_path(G, src, dst, weight=weight)
-        if not full_path:
-            full_path.extend(leg)
-        else:
-            full_path.extend(leg[1:])
-    
-    return full_path if full_path else tsp_tour
 
+    name        = "ga"
+    description = "Genetic Algorithm — balanced time+distance (50/50), TSP-aware multi-stop"
 
-class ChristofidesAlgorithm(BaseRoutingAlgorithm):
-    """
-    Christofides approximation untuk multi-stop routing.
-
-    Manual singkat:
-    - Dipakai untuk skenario dengan 3+ waypoint.
-    - Input node diambil dari scenario.route_nodes / node_sequence.
-    - Urutan stop dihitung dari metric closure + Christofides.
-    - Urutan itu lalu di-expand kembali ke road network asli.
-    - Untuk point-to-point biasa tetap aman memakai shortest path.
-    """
-    name        = "christofides"
-    description = "Christofides — multi-stop TSP approximation"
-
-    def _route_multi_stop(self, G, nodes: list, scenario_name="", source_node=None, target_node=None):
-        t0 = time.perf_counter()
-        nodes = list(dict.fromkeys(nodes))
-        if len(nodes) < 3:
-            if source_node is None:
-                source_node = nodes[0] if nodes else None
-            if target_node is None:
-                target_node = nodes[-1] if nodes else None
-            if source_node is None or target_node is None:
-                ms = (time.perf_counter() - t0) * 1000
-                return RouteResult.failure(self.name, scenario_name, -1, -1, "Not enough nodes for routing", ms)
-            try:
-                route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
-            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-                ms = (time.perf_counter() - t0) * 1000
-                return RouteResult.failure(self.name, scenario_name, source_node, target_node, str(e), ms)
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.build(G, self.name, scenario_name, source_node, target_node, route, ms, {
-                "algorithm_variant": "point_to_point_fallback",
-                "reason": "fewer_than_three_waypoints",
-            })
-
-        closure, pair_paths = _build_metric_closure(G, nodes, weight="travel_time")
-        tour = _christofides_tour(closure, start_node=source_node or nodes[0])
-        if len(tour) < 2:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name, source_node or nodes[0], target_node or nodes[-1], "Christofides returned an empty tour", ms)
-
-        try:
-            route = _expand_tsp_tour_to_road_path(G, tour, weight="travel_time")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name, source_node or nodes[0], target_node or nodes[-1], str(e), ms)
-
-        ms = (time.perf_counter() - t0) * 1000
-        metadata = {
-            "algorithm_variant": "christofides_tsp",
-            "multi_stop": True,
-            "stop_count": len(nodes),
-            "stops": nodes,
-            "tour_nodes": tour,
-            "metric_closure_nodes": len(closure.nodes()),
-            "expanded_path_nodes": len(route),
-            "valid_solution": bool(route),
-        }
-        return RouteResult.build(
-            G,
-            self.name,
-            scenario_name,
-            source_node if source_node is not None else nodes[0],
-            target_node if target_node is not None else nodes[-1],
-            route,
-            ms,
-            metadata,
-        )
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0 = time.perf_counter()
-        try:
-            route = nx.shortest_path(G, source_node, target_node, weight="travel_time")
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name,
-                                       source_node, target_node, str(e), ms)
-        ms = (time.perf_counter() - t0) * 1000
-        metadata = {
-            "algorithm_variant": "point_to_point_fallback",
-            "reason": "point_to_point_routing",
-        }
-        return RouteResult.build(G, self.name, scenario_name,
-                                 source_node, target_node, route, ms, metadata)
-
-
-# ──────────────────────────────────────────────────────────────
-# SANDY
-# Fitness: balanced waktu + jarak (50/50)
-# → cenderung pilih rute lebih pendek meski sedikit lebih lambat
-# ──────────────────────────────────────────────────────────────
-
-class SandyGA(BaseRoutingAlgorithm):
-    """
-    Sandy — GA dengan fitness balanced time+distance.
-
-    Strategi:
-    - Fitness = 50% travel_time + 50% physical_distance (dinormalisasi).
-      Efeknya: GA memilih rute yang tidak terlalu memutar meski sedikit
-      lebih lambat dari rute tercepat murni. Berbeda dari Dijkstra time.
-    - Populasi besar (50) + tournament ketat (5) → konvergen cepat.
-    - Custom crossover: pivot di tengah path → segmen lebih seimbang.
-    """
-    name        = "sandy_ga"
-    description = "Sandy — GA balanced time+distance (50/50)"
-
-    # ── TUNING ZONE Sandy ─────────────────────────────────────
-    POPULATION_SIZE = 100
-    GENERATIONS     = 100
+    # ── Point-to-point hyperparameters (used by find_route) ──────────────
+    POPULATION_SIZE = 30
+    GENERATIONS     = 20
     CROSSOVER_RATE  = 0.85
     MUTATION_RATE   = 0.6
     TOURNAMENT_SIZE = 5
     RANDOM_SEED     = 42
-    # ─────────────────────────────────────────────────────────
+
+    # ── TSP multi-stop hyperparameters (used by _route_multi_stop) ───────
+    # Separate from point-to-point because TSP search space is smaller
+    # (permutations of ~50 stops vs. road paths with thousands of nodes),
+    # so fewer individuals and generations are needed to converge.
+    TSP_POPULATION_SIZE = 40    # individuals per generation
+    TSP_GENERATIONS     = 80    # max generations before forced stop
+    TSP_PATIENCE        = 15    # stop early if no improvement for this many gens
+    TSP_WORKERS         = 4     # parallel threads for pairwise precomputation
+
+    # ─────────────────────────────────────────────────────────────────────
 
     def _fitness(self, G, path: list) -> float:
         """
-        Balanced fitness: 50% waktu perjalanan + 50% jarak fisik.
-        Jarak dinormalisasi ke satuan detik pakai kecepatan referensi 40 km/h.
-        Rute yang lebih pendek (walau sedikit lebih lambat) tetap diunggulkan.
+        Balanced fitness for point-to-point path optimisation.
+
+        Combines travel_time (speed) and physical distance (path length)
+        equally weighted at 50/50. Distance is normalised to seconds by
+        dividing by 40 km/h (a conservative urban driving speed), making
+        both objectives comparable on the same scale.
+
+        Effect: a slightly slower route that avoids a long detour can
+        outcompete a fast-but-winding route. Different from Dijkstra,
+        which minimises only travel_time.
         """
-        REF_SPEED_MS = 40 / 3.6   # 40 km/h dalam m/s
+        REF_SPEED_MS = 40 / 3.6   # 40 km/h expressed in m/s for normalisation
         time_s = 0.0
         dist_m = 0.0
         for u, v in zip(path[:-1], path[1:]):
@@ -608,16 +396,26 @@ class SandyGA(BaseRoutingAlgorithm):
             best    = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
             time_s += float(best.get("travel_time", 9999))
             dist_m += float(best.get("length", 0))
-        dist_as_time = dist_m / REF_SPEED_MS   # konversi jarak → "waktu ekuivalen"
+        # Convert distance to a "time equivalent" so both terms are in seconds
+        dist_as_time = dist_m / REF_SPEED_MS
         return 0.5 * time_s + 0.5 * dist_as_time
 
     def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        # Pivot = node bersama paling dekat ke tengah p1.
+        """
+        Mid-pivot common-node crossover.
+
+        Instead of picking a random shared intersection as the pivot,
+        this variant selects the shared node that is geometrically
+        closest to the midpoint of p1. This produces children that
+        evenly combine the first half of one parent with the second
+        half of the other, avoiding lopsided offspring.
+        """
         set1   = set(p1[1:-1])
         common = [n for n in p2[1:-1] if n in set1]
         if not common:
             return p1[:]
         mid      = len(p1) // 2
+        # Find the pivot closest to the middle index of p1
         min_dist = min(abs(p1.index(n) - mid) for n in common)
         best     = [n for n in common if abs(p1.index(n) - mid) == min_dist]
         pivot    = rng.choice(best)
@@ -626,8 +424,243 @@ class SandyGA(BaseRoutingAlgorithm):
         return p1[:i1] + p2[i2:]
 
     def _mutate(self, G, path: list, rng: random.Random) -> list:
+        """Standard segment re-route mutation (see _ga_mutate for details)."""
         return _ga_mutate(G, path, rng)
 
+    # ── Multi-stop TSP entry point ────────────────────────────────────────
+
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None) -> RouteResult:
+        """
+        TSP-GA for multi-stop circular routing.
+
+        The algorithm decides both WHICH ORDER to visit the stops and
+        WHICH ROAD to take between each pair — the caller only provides
+        the set of stops, not their order.
+
+        Algorithm outline:
+          1. Precompute a pairwise travel_time cost matrix between all stops
+             using N full Dijkstra sweeps (one per stop as source).
+             This is O(N × graph_Dijkstra) — done once, reused every generation.
+          2. Evolve a population of visit-order permutations via GA.
+             - Chromosome: permutation of the N-1 intermediate stops
+               (start node is fixed at nodes[0]).
+             - Fitness: total travel_time of the circular tour
+               start → stop_1 → stop_2 → ... → stop_{N-1} → start.
+             - Crossover: Order Crossover (OX) — always produces a valid
+               permutation with no duplicates.
+             - Mutation: swap two random stop positions.
+          3. Expand the best permutation into a full road-network path
+             by running shortest_path for each leg of the final tour.
+
+        The tour is always circular — the algorithm guarantees the route
+        returns to the starting point.
+        """
+        t0 = time.perf_counter()
+
+        # Remove duplicate stops while preserving the original order
+        nodes = list(dict.fromkeys(nodes))
+
+        if len(nodes) < 2:
+            ms = (time.perf_counter() - t0) * 1000
+            n0 = nodes[0] if nodes else -1
+            return RouteResult.failure(self.name, scenario_name, n0, n0,
+                                       "Need at least 2 stops for a tour", ms)
+
+        # The first node in the list is the fixed starting (and ending) point
+        start         = nodes[0]
+        intermediates = nodes[1:]   # these are the stops whose order is evolved
+
+        # ── Step 1: Precompute pairwise costs (parallel) ──────────────────
+        # Run one Dijkstra sweep per stop as source, then extract costs to
+        # all other stops from the result. N sweeps instead of N² calls.
+        # ThreadPoolExecutor runs sweeps concurrently — each Dijkstra is
+        # independent, so threads don't block each other.
+        n_nodes = len(nodes)
+        log.info(f"  GA TSP [{scenario_name}]: precomputing {n_nodes}×{n_nodes} "
+                 f"cost matrix ({n_nodes} Dijkstra sweeps, "
+                 f"{self.TSP_WORKERS} threads)...")
+
+        def _dijkstra_row(src):
+            try:
+                return src, dict(nx.single_source_dijkstra_path_length(
+                    G, src, weight="travel_time"
+                ))
+            except (nx.NodeNotFound, nx.NetworkXError):
+                return src, {}
+
+        pair_cost: dict = {}
+        with ThreadPoolExecutor(max_workers=self.TSP_WORKERS) as pool:
+            for src, lengths in pool.map(_dijkstra_row, nodes):
+                for dst in nodes:
+                    if dst != src:
+                        pair_cost[(src, dst)] = lengths.get(dst, float("inf"))
+
+        log.info(f"  GA TSP [{scenario_name}]: cost matrix ready — "
+                 f"starting evolution (pop={self.TSP_POPULATION_SIZE}, "
+                 f"max_gen={self.TSP_GENERATIONS}, patience={self.TSP_PATIENCE})")
+
+        # ── Tour cost helper (used inside the GA loop) ────────────────────
+        def tour_cost(perm: list) -> float:
+            """
+            Sum of pairwise costs for the circular tour:
+              start → perm[0] → perm[1] → ... → perm[-1] → start
+            All costs come from the precomputed dict — O(N) lookup.
+            """
+            full_tour = [start] + perm + [start]
+            return sum(
+                pair_cost.get((a, b), float("inf"))
+                for a, b in zip(full_tour[:-1], full_tour[1:])
+            )
+
+        # ── Order Crossover (OX) for permutations ────────────────────────
+        def ox_crossover(p1: list, p2: list) -> list:
+            """
+            Standard Order Crossover (OX) — classic TSP operator.
+
+            Copies a random contiguous segment from p1 into the child,
+            then fills the remaining positions with elements from p2
+            in their original relative order. Guarantees no duplicates.
+            """
+            size = len(p1)
+            if size < 2:
+                return p1[:]
+            # Choose two cut points
+            a, b = sorted(rng.sample(range(size), 2))
+            child = [None] * size
+            child[a:b + 1] = p1[a:b + 1]   # copy segment from parent 1
+            # Fill from parent 2, skipping nodes already in the child
+            fill = [x for x in p2 if x not in child]
+            j = 0
+            for i in range(size):
+                if child[i] is None:
+                    child[i] = fill[j]
+                    j += 1
+            return child
+
+        # ── Swap mutation for permutations ────────────────────────────────
+        def swap_mutate(perm: list) -> list:
+            """
+            Randomly swap two stops in the tour order.
+            Simple and effective for TSP: a single swap can yield a very
+            different total tour cost depending on the graph topology.
+            """
+            if len(perm) < 2:
+                return perm[:]
+            p = perm[:]
+            i, j = rng.sample(range(len(p)), 2)
+            p[i], p[j] = p[j], p[i]
+            return p
+
+        # ── Step 2: Evolve visit-order permutations ───────────────────────
+        rng = random.Random(self.RANDOM_SEED)
+
+        # Initialise population with random shuffles of the intermediate stops
+        population = []
+        for _ in range(self.TSP_POPULATION_SIZE):
+            perm = intermediates[:]
+            rng.shuffle(perm)
+            population.append(perm)
+
+        best_perm     = intermediates[:]
+        best_cost     = tour_cost(best_perm)
+        gen_history   = []
+        no_improve    = 0   # consecutive generations without improvement
+
+        for gen_idx in range(self.TSP_GENERATIONS):
+            fitness  = [tour_cost(p) for p in population]
+            best_idx = min(range(len(population)), key=lambda i: fitness[i])
+            elite    = population[best_idx]
+
+            if fitness[best_idx] < best_cost - 1e-6:
+                best_perm  = elite[:]
+                best_cost  = fitness[best_idx]
+                no_improve = 0
+            else:
+                no_improve += 1
+
+            gen_history.append({
+                "gen":  gen_idx + 1,
+                "min":  round(best_cost / 60, 3),
+                "dist": 0.0,    # filled after final expansion
+            })
+
+            # Log progress every 10 generations so user can see it's running
+            if (gen_idx + 1) % 10 == 0:
+                log.info(f"  GA TSP [{scenario_name}]: gen {gen_idx+1}/{self.TSP_GENERATIONS} "
+                         f"— best {best_cost/60:.2f} min "
+                         f"(no-improve streak: {no_improve}/{self.TSP_PATIENCE})")
+
+            # Early stopping — no point continuing if the population has converged
+            if no_improve >= self.TSP_PATIENCE:
+                log.info(f"  GA TSP [{scenario_name}]: early stop at gen {gen_idx+1} "
+                         f"(no improvement for {self.TSP_PATIENCE} gens)")
+                break
+
+            # Build next generation with elitism
+            new_pop = [elite[:]]
+            while len(new_pop) < self.TSP_POPULATION_SIZE:
+                p1 = _ga_tournament(population, fitness, self.TOURNAMENT_SIZE, rng)
+                if rng.random() < self.CROSSOVER_RATE:
+                    p2    = _ga_tournament(population, fitness, self.TOURNAMENT_SIZE, rng)
+                    child = ox_crossover(p1, p2)
+                else:
+                    child = p1[:]
+                if rng.random() < self.MUTATION_RATE:
+                    child = swap_mutate(child)
+                new_pop.append(child)
+            population = new_pop
+
+        # ── Step 3: Expand best permutation into a full road path ─────────
+        # The tour is circular: [start, stop_1, stop_2, ..., stop_{N-1}, start]
+        # Each leg is expanded to a real road path using shortest_path.
+        full_tour_stops = [start] + best_perm + [start]   # first == last → circular
+        full_route: list = []
+
+        for src, dst in zip(full_tour_stops[:-1], full_tour_stops[1:]):
+            try:
+                leg = nx.shortest_path(G, src, dst, weight="travel_time")
+            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+                ms = (time.perf_counter() - t0) * 1000
+                return RouteResult.failure(self.name, scenario_name,
+                                           start, start, str(e), ms)
+            if not full_route:
+                full_route.extend(leg)
+            else:
+                # Skip the first node of each leg to avoid duplicating junctions
+                full_route.extend(leg[1:])
+
+        # Backfill the final gen_history entry with actual road-level data
+        # now that we have the real expanded path.
+        final_dist_km = round(_ga_path_distance(G, full_route) / 1000, 3)
+        final_coords  = []
+        for n in full_route:
+            nd = G.nodes.get(n)
+            if nd:
+                final_coords.append([round(float(nd["y"]), 5),
+                                      round(float(nd["x"]), 5)])
+        if gen_history:
+            gen_history[-1]["dist"]    = final_dist_km
+            gen_history[-1]["coords"]  = final_coords
+            gen_history[-1]["streets"] = _route_streets(G, full_route)
+
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name,
+            start, start,   # source == target because the tour is circular
+            full_route, ms,
+            metadata={
+                "algorithm_variant": "tsp_ga",
+                "generations":       self.GENERATIONS,
+                "population":        self.POPULATION_SIZE,
+                "crossover_rate":    self.CROSSOVER_RATE,
+                "mutation_rate":     self.MUTATION_RATE,
+                "stop_count":        len(nodes),
+                "visit_order":       full_tour_stops,
+                "gen_history":       gen_history,
+            },
+        )
     def find_route(self, G, source_node, target_node, scenario_name=""):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
@@ -747,269 +780,242 @@ class BurhanGA(BaseRoutingAlgorithm):
         return _ga_mutate(G, path, rng)     # TODO: boleh override
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
+        """
+        Point-to-point routing via path-level GA.
+        Delegates to the shared _ga_run loop using this class's hyperparameters
+        and fitness / crossover / mutate implementations.
+        """
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
+
+# ══════════════════════════════════════════════════════════════════
+# SECTION 4: ANT COLONY OPTIMIZATION (ACO) — renumbered after Christofides removal
+
+# ══════════════════════════════════════════════════════════════════
+# SECTION 5: ANT COLONY OPTIMIZATION (ACO)
+#
+# Mimics how real ant colonies find shortest paths via pheromone trails.
+# Ants probabilistically choose edges based on pheromone strength (τ)
+# and visibility (η = 1/travel_time). Over iterations, shorter paths
+# accumulate more pheromone and are chosen more often — positive feedback.
+#
+# Parameters:
+#   ALPHA  — pheromone weight (higher → more exploitative)
+#   BETA   — visibility weight (higher → more greedy/myopic)
+#   RHO    — evaporation rate (higher → shorter memory)
+#   Q      — pheromone deposit constant
+# ══════════════════════════════════════════════════════════════════
+
 class AntColonyRouting(BaseRoutingAlgorithm):
-     
+    """
+    Ant Colony Optimization (ACO) for point-to-point routing.
+
+    Each ant builds a path by choosing the next node probabilistically,
+    weighted by pheromone (learned from past good solutions) and
+    visibility (inverse of travel_time — prefers fast edges).
+
+    After all ants complete their paths in an iteration, pheromone evaporates
+    globally and the best-performing ant deposits fresh pheromone along its
+    route. This reinforces good paths over time.
+    """
     name        = "aco_routing"
-    description = "Ant Colony Optimization — feromon + visibilitas travel_time"
- 
-    # ------------------------------------------------------------------
-    # PARAMETER TUNING
-    # ------------------------------------------------------------------
-    N_ANTS        = 20     # jumlah semut per iterasi
-    N_ITERATIONS  = 30     # jumlah iterasi koloni
-    ALPHA         = 1.0    # bobot feromon τ — naikkan → lebih eksploitatif
-    BETA          = 2.0    # bobot visibilitas η — naikkan → lebih greedy
-    RHO           = 0.1    # laju evaporasi feromon (0.0–1.0)
-                           # kecil → feromon bertahan lama (memori panjang)
-                           # besar → feromon cepat hilang (eksplorasi lebih)
-    Q             = 100.0  # konstanta deposit feromon
-    TAU_INIT      = 1.0    # nilai feromon awal semua edge
+    description = "Ant Colony Optimization — pheromone × visibility (travel_time)"
+
+    # ── ACO parameters ────────────────────────────────────────────────────
+    N_ANTS        = 20     # number of ants per iteration
+    N_ITERATIONS  = 30     # total iterations of the colony
+    ALPHA         = 1.0    # pheromone influence — raise to exploit known good paths
+    BETA          = 2.0    # visibility influence — raise to be more greedy
+    RHO           = 0.1    # evaporation rate — low → long pheromone memory
+    Q             = 100.0  # deposit constant: shorter path → more deposit (Q/cost)
+    TAU_INIT      = 1.0    # initial pheromone on all edges (uniform start)
     RANDOM_SEED   = 42
- 
-    # ------------------------------------------------------------------
-    # HELPER 1: bangun graph sederhana (node → neighbors dengan cost)
-    #           dari subset node yang relevan sekitar jalur source-target
-    # ------------------------------------------------------------------
+
     def _get_candidates(self, G, node: int, visited: set) -> list:
         """
-        Kembalikan list tetangga yang belum dikunjungi dari node ini,
-        beserta travel_time edge terbaik ke masing-masing tetangga.
-        Format: [(neighbor, travel_time), ...]
+        Return unvisited neighbours of `node` with their edge travel_time.
+        Format: [(neighbour_node, travel_time), ...]
         """
         candidates = []
-        for neighbor in G.successors(node):
-            if neighbor in visited:
+        for neighbour in G.successors(node):
+            if neighbour in visited:
                 continue
-            edge_dict = G.get_edge_data(node, neighbor)
+            edge_dict = G.get_edge_data(node, neighbour)
             if not edge_dict:
                 continue
-            best_tt = min(
-                float(d.get("travel_time", 9999))
-                for d in edge_dict.values()
-            )
+            # Use the fastest parallel edge between node and neighbour
+            best_tt = min(float(d.get("travel_time", 9999))
+                          for d in edge_dict.values())
             if best_tt < 9999:
-                candidates.append((neighbor, best_tt))
+                candidates.append((neighbour, best_tt))
         return candidates
- 
-    # ------------------------------------------------------------------
-    # HELPER 2: satu semut membangun rute dari source ke target
-    # ------------------------------------------------------------------
-    def _build_ant_path(
-        self,
-        G,
-        source: int,
-        target: int,
-        pheromone: dict,
-        rng: random.Random,
-        max_steps: int
-    ) -> list | None:
+
+    def _build_ant_path(self, G, source: int, target: int,
+                        pheromone: dict, rng: random.Random,
+                        max_steps: int) -> list | None:
         """
-        Semut bergerak dari source ke target dengan memilih node
-        berikutnya secara probabilistik.
- 
-        Strategi:
-          - Jika target ada di antara kandidat → langsung pilih target
-          - Jika tidak ada kandidat → gunakan Dijkstra sebagai fallback
-            untuk melanjutkan ke node terdekat menuju target
-          - Jika melebihi max_steps → batalkan (path terlalu panjang)
- 
-        Returns: list node IDs, atau None jika gagal
+        Build one ant's path from source to target.
+
+        At each step the ant picks the next node via roulette-wheel selection
+        weighted by (τ^α × η^β) for each candidate. If the target is directly
+        reachable, the ant moves there immediately (greedy shortcut). If stuck
+        with no unvisited candidates, Dijkstra bridges the gap to the target.
         """
         path    = [source]
         visited = {source}
         current = source
- 
+
         for _ in range(max_steps):
             if current == target:
                 return path
- 
+
             candidates = self._get_candidates(G, current, visited)
- 
-            # Tidak ada kandidat → coba Dijkstra lokal sebagai bridge
+
+            # Stuck: bridge to target via Dijkstra and terminate
             if not candidates:
                 try:
-                    bridge = nx.shortest_path(
-                        G, current, target, weight="travel_time"
-                    )
-                    # Gabungkan path yang sudah ada dengan sisa bridge
+                    bridge = nx.shortest_path(G, current, target, weight="travel_time")
                     path += bridge[1:]
                     return path
                 except (nx.NetworkXNoPath, nx.NodeNotFound):
                     return None
- 
-            # Shortcut: jika target langsung bisa dicapai
-            target_candidates = [(n, tt) for n, tt in candidates if n == target]
-            if target_candidates:
+
+            # Shortcut: if target is directly reachable, take it
+            if any(n == target for n, _ in candidates):
                 path.append(target)
                 return path
- 
-            # ── Hitung probabilitas transisi ──────────────────────
+
+            # Probabilistic transition: score each candidate
             scores = []
-            for neighbor, tt in candidates:
-                tau = pheromone.get((current, neighbor), self.TAU_INIT)
-                eta = 1.0 / tt if tt > 0 else 1.0
-                score = (tau ** self.ALPHA) * (eta ** self.BETA)
-                scores.append(score)
- 
+            for neighbour, tt in candidates:
+                tau   = pheromone.get((current, neighbour), self.TAU_INIT)
+                eta   = 1.0 / tt if tt > 0 else 1.0
+                scores.append((tau ** self.ALPHA) * (eta ** self.BETA))
+
             total = sum(scores)
             if total == 0:
-                # Semua skor nol → pilih acak (fallback uniform)
+                # All scores zero — choose uniformly at random
                 chosen = rng.choice(candidates)[0]
             else:
                 # Roulette wheel selection
-                probs   = [s / total for s in scores]
-                r       = rng.random()
-                cumul   = 0.0
-                chosen  = candidates[-1][0]  # default: kandidat terakhir
-                for (neighbor, _), prob in zip(candidates, probs):
+                probs  = [s / total for s in scores]
+                r      = rng.random()
+                cumul  = 0.0
+                chosen = candidates[-1][0]   # default: last candidate
+                for (neighbour, _), prob in zip(candidates, probs):
                     cumul += prob
                     if r <= cumul:
-                        chosen = neighbor
+                        chosen = neighbour
                         break
- 
+
             path.append(chosen)
             visited.add(chosen)
             current = chosen
- 
-        return None  # melebihi max_steps
- 
-    # ------------------------------------------------------------------
-    # HELPER 3: hitung total travel_time sebuah path
-    # ------------------------------------------------------------------
+
+        return None   # exceeded max_steps
+
     def _path_cost(self, G, path: list) -> float:
-        """
-        Total travel_time (detik) sepanjang path.
-        Pakai edge terbaik (travel_time terkecil) untuk setiap hop.
-        """
+        """Total travel_time (seconds) along a path."""
         total = 0.0
         for u, v in zip(path[:-1], path[1:]):
             edge_dict = G.get_edge_data(u, v)
             if not edge_dict:
                 return float("inf")
-            best_tt = min(
-                float(d.get("travel_time", 9999))
-                for d in edge_dict.values()
-            )
-            total += best_tt
+            total += min(float(d.get("travel_time", 9999)) for d in edge_dict.values())
         return total
- 
-    # ------------------------------------------------------------------
-    # HELPER 4: deposit feromon pada path terbaik iterasi
-    # ------------------------------------------------------------------
-    def _deposit_pheromone(
-        self,
-        pheromone: dict,
-        path: list,
-        cost: float
-    ) -> None:
+
+    def _deposit_pheromone(self, pheromone: dict,
+                           path: list, cost: float) -> None:
         """
-        Semut terbaik deposit feromon di sepanjang jalurnya.
-        Jalur lebih pendek → deposit lebih banyak (Q / cost).
+        Deposit pheromone along the best path of an iteration.
+        The deposit amount is inversely proportional to cost:
+          better (shorter) paths receive more pheromone → positive feedback.
         """
         deposit = self.Q / cost if cost > 0 else 0.0
         for u, v in zip(path[:-1], path[1:]):
             key = (u, v)
             pheromone[key] = pheromone.get(key, self.TAU_INIT) + deposit
- 
-    # ------------------------------------------------------------------
-    # CORE: jalankan koloni ACO
-    # ------------------------------------------------------------------
+
     def _run_aco(self, G, source: int, target: int) -> list:
         """
-        Jalankan N_ITERATIONS iterasi koloni ACO.
- 
-        Setiap iterasi:
-          1. N_ANTS semut membangun path masing-masing
-          2. Feromon menguap (evaporasi global)
-          3. Semut terbaik iterasi deposit feromon
-          4. Update global best jika ada yang lebih baik
- 
-        Returns: path terbaik yang ditemukan (list node IDs)
-        Raises : nx.NetworkXNoPath jika tidak ada path sama sekali
+        Run N_ITERATIONS of the ant colony.
+
+        Each iteration:
+          1. Send N_ANTS from source; collect valid paths to target.
+          2. Evaporate all pheromone globally by factor (1 - RHO).
+          3. Best ant of this iteration deposits fresh pheromone.
+          4. Update global best if improved.
+
+        Falls back to Dijkstra if no ant ever reaches the target.
         """
-        rng        = random.Random(self.RANDOM_SEED)
-        pheromone  = {}  # sparse dict: (u,v) → tau value
-        best_path  = None
-        best_cost  = float("inf")
- 
-        # Estimasi max_steps: 3× jumlah node di subgraph lokal
-        # (batas atas agar semut tidak loop selamanya)
+        rng       = random.Random(self.RANDOM_SEED)
+        pheromone = {}   # sparse dict: (u, v) → tau value
+        best_path = None
+        best_cost = float("inf")
+
+        # Cap max_steps to 3× graph size to prevent infinite loops
         max_steps = min(G.number_of_nodes(), 5000)
- 
-        for iteration in range(self.N_ITERATIONS):
+
+        for _ in range(self.N_ITERATIONS):
             iter_best_path = None
             iter_best_cost = float("inf")
- 
-            # ── Setiap semut bangun satu path ──────────────────
+
+            # All ants build their paths for this iteration
             for _ in range(self.N_ANTS):
-                path = self._build_ant_path(
-                    G, source, target, pheromone, rng, max_steps
-                )
+                path = self._build_ant_path(G, source, target, pheromone, rng, max_steps)
                 if path is None or path[-1] != target:
-                    continue
- 
+                    continue   # ant failed to reach target
                 cost = self._path_cost(G, path)
                 if cost < iter_best_cost:
                     iter_best_path = path
                     iter_best_cost = cost
- 
-            # ── Evaporasi feromon (semua edge) ─────────────────
+
+            # Global evaporation
             for key in list(pheromone.keys()):
                 pheromone[key] *= (1.0 - self.RHO)
                 if pheromone[key] < 1e-6:
-                    del pheromone[key]  # bersihkan nilai sangat kecil
- 
-            # ── Deposit feromon dari semut terbaik iterasi ─────
+                    del pheromone[key]   # prune near-zero entries to save memory
+
+            # Deposit pheromone for the best path this iteration
             if iter_best_path is not None:
                 self._deposit_pheromone(pheromone, iter_best_path, iter_best_cost)
- 
-                # Update global best
                 if iter_best_cost < best_cost:
                     best_path = iter_best_path
                     best_cost = iter_best_cost
- 
-        # Fallback: jika tidak ada semut berhasil, pakai Dijkstra
+
+        # Fallback: if the colony never found a path, use Dijkstra
         if best_path is None:
             try:
-                best_path = nx.shortest_path(
-                    G, source, target, weight="travel_time"
-                )
+                best_path = nx.shortest_path(G, source, target, weight="travel_time")
             except (nx.NetworkXNoPath, nx.NodeNotFound):
-                raise nx.NetworkXNoPath(
-                    f"ACO: tidak ada jalur dari {source} ke {target}"
-                )
- 
+                raise nx.NetworkXNoPath(f"ACO: no path from {source} to {target}")
+
         return best_path
- 
-    # ------------------------------------------------------------------
-    # INTERFACE WAJIB — dipanggil oleh framework benchmark
-    # ------------------------------------------------------------------
+
     def find_route(self, G, source_node, target_node, scenario_name=""):
-        """
-        Entry point yang dipanggil oleh benchmark.
-        Menjalankan ACO dan membungkus hasilnya dalam RouteResult.
-        """
+        """Run ACO and wrap the result in a RouteResult."""
         t0 = time.perf_counter()
         try:
             route = self._run_aco(G, source_node, target_node)
         except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
             ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(
-                self.name, scenario_name,
-                source_node, target_node, str(e), ms
-            )
+            return RouteResult.failure(self.name, scenario_name,
+                                       source_node, target_node, str(e), ms)
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(
-            G, self.name, scenario_name,
-            source_node, target_node, route, ms,
+            G, self.name, scenario_name, source_node, target_node, route, ms,
             metadata={
                 "n_ants":       self.N_ANTS,
                 "n_iterations": self.N_ITERATIONS,
                 "alpha":        self.ALPHA,
                 "beta":         self.BETA,
                 "rho":          self.RHO,
+            },
+        )
+
+
+# ══════════════════════════════════════════════════════════════════
+# SECTION 6: SIMULATED ANNEALING (SA)
                 "strategy":     "pheromone × (1/travel_time) visibility, no highway weighting",
             }
         )
@@ -1523,415 +1529,479 @@ class AntColonyElite(BaseRoutingAlgorithm):
 #
 #   REGISTRY.register(AntColonyRouting())
 #
-# ──────────────────────────────────────────────────────────────
-
-# ──────────────────────────────────────────────────────────────
-# BIMO — TODO: isi bagian ini
-# ──────────────────────────────────────────────────────────────
-
-class BimoGA(BaseRoutingAlgorithm):
-    """
-    Bimo — tulis strategimu di sini setelah kamu tentukan.
-
-    Yang WAJIB diubah:
-      1. Angka-angka di TUNING ZONE
-      2. Isi _fitness() dengan objective function milikmu
-
-    Lihat SandyGA di atas sebagai contoh _fitness() yang sudah jadi.
-    """
-    name        = "bimo_ga"
-    description = "Bimo — GA (belum dituning)"
-
-    # ── TUNING ZONE Bimo -- UBAH ANGKA INI ───────────────────
-    POPULATION_SIZE = 80    # lebih besar supaya eksplorasi rute lebih beragam
-    GENERATIONS     = 90    # iterasi lebih banyak untuk stabilisasi fitness
-    CROSSOVER_RATE  = 0.88  # tetap tinggi, tapi tidak agresif penuh
-    MUTATION_RATE   = 0.42  # cukup eksploratif untuk menghindari stagnasi
-    TOURNAMENT_SIZE = 4     # seleksi sedikit lebih ketat dari default
-    RANDOM_SEED     = 20
-    # ─────────────────────────────────────────────────────────
-
-    def _fitness(self, G, path: list) -> float:
-        """
-        TODO: ganti dengan objective function milikmu.
-
-        Nilai return harus berupa float — semakin kecil = semakin baik.
-        Defaultnya minimasi travel_time (sama seperti Dijkstra).
-
-        Edge attributes yang bisa kamu pakai per edge (u, v):
-          best = min(G.get_edge_data(u,v).values(),
-                     key=lambda d: float(d.get("travel_time", 9999)))
-          best.get("travel_time")  # detik
-          best.get("length")       # meter
-          best.get("speed_kph")    # km/h
-          best.get("highway")      # tipe jalan: primary/secondary/residential/...
-          best.get("name")         # nama jalan
-        """
-        return _ga_path_cost(G, path)   # default — ganti dengan idemu
-
-    def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        return _ga_crossover(p1, p2, rng)   # TODO: boleh override
-
-    def _mutate(self, G, path: list, rng: random.Random) -> list:
-        return _ga_mutate(G, path, rng)     # TODO: boleh override
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        return _ga_run(self, G, source_node, target_node, scenario_name)
-
-
-# ──────────────────────────────────────────────────────────────
-# GERALD — TODO: isi bagian ini
-# ──────────────────────────────────────────────────────────────
-
-class GeraldGA(BaseRoutingAlgorithm):
-    """
-    Gerald — tulis strategimu di sini setelah kamu tentukan.
-
-    Yang WAJIB diubah:
-      1. Angka-angka di TUNING ZONE
-      2. Isi _fitness() dengan objective function milikmu
-
-    Lihat SandyGA di atas sebagai contoh _fitness() yang sudah jadi.
-    """
-    name        = "gerald_ga"
-    description = "Gerald — GA (belum dituning)"
-
-    # ── TUNING ZONE Gerald -- UBAH ANGKA INI ─────────────────
-    POPULATION_SIZE = 30    # TODO: coba variasikan
-    GENERATIONS     = 50    # TODO: coba variasikan
-    CROSSOVER_RATE  = 0.8   # TODO: coba variasikan
-    MUTATION_RATE   = 0.3   # TODO: coba variasikan
-    TOURNAMENT_SIZE = 3     # TODO: coba variasikan
-    RANDOM_SEED     = 30
-    # ─────────────────────────────────────────────────────────
-
-    def _fitness(self, G, path: list) -> float:
-        """
-        TODO: ganti dengan objective function milikmu.
-
-        Nilai return harus berupa float — semakin kecil = semakin baik.
-        Defaultnya minimasi travel_time (sama seperti Dijkstra).
-
-        Edge attributes yang bisa kamu pakai per edge (u, v):
-          best = min(G.get_edge_data(u,v).values(),
-                     key=lambda d: float(d.get("travel_time", 9999)))
-          best.get("travel_time")  # detik
-          best.get("length")       # meter
-          best.get("speed_kph")    # km/h
-          best.get("highway")      # tipe jalan: primary/secondary/residential/...
-          best.get("name")         # nama jalan
-        """
-        return _ga_path_cost(G, path)   # default — ganti dengan idemu
-
-    def _crossover(self, p1: list, p2: list, rng: random.Random) -> list:
-        return _ga_crossover(p1, p2, rng)   # TODO: boleh override
-
-    def _mutate(self, G, path: list, rng: random.Random) -> list:
-        return _ga_mutate(G, path, rng)     # TODO: boleh override
-
-    def find_route(self, G, source_node, target_node, scenario_name=""):
-        return _ga_run(self, G, source_node, target_node, scenario_name)
-
-
-# ──────────────────────────────────────────────────────────────
-# GERALD - Simulated Annealing untuk shortest path
+# Inspired by the metallurgical process of slowly cooling metal.
+# Starts with a random valid path and iteratively proposes small
+# changes (neighbours). Improvements are always accepted; degradations
+# are accepted with probability exp(-Δcost / T), where T decreases
+# over time. Early on (high T) it explores widely; later (low T) it
+# exploits the best solution found.
+#
+# Objective: minimise physical distance (metres), not travel_time.
+# ══════════════════════════════════════════════════════════════════
 
 class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
     """
-    Gerald - Simulated Annealing untuk mencari shortest path.
+    Simulated Annealing for shortest-distance path finding.
 
-    Objective utama = total distance (meter). Kandidat tetangga dibuat
-    dengan mengganti satu sub-rute memakai shortest path berbobot length
-    plus noise, lalu diterima memakai probabilitas annealing.
+    Unlike the GA (which optimises travel_time), SA here minimises
+    the total physical distance in metres. Useful for comparing
+    time-optimal vs distance-optimal strategies.
     """
     name        = "gerald_sa"
-    description = "Gerald - Simulated Annealing shortest path (distance)"
+    description = "Simulated Annealing — minimise physical distance"
 
-    ITERATIONS          = 100
-    INITIAL_TEMPERATURE = 1200.0
-    COOLING_RATE        = 0.94
-    MIN_TEMPERATURE     = 0.01
+    # ── SA parameters ─────────────────────────────────────────────────────
+    ITERATIONS          = 100     # total neighbour proposals
+    INITIAL_TEMPERATURE = 1200.0  # high T → accept bad moves freely (exploration)
+    COOLING_RATE        = 0.94    # multiply T by this each iteration (slow cool)
+    MIN_TEMPERATURE     = 0.01    # stop accepting bad moves below this threshold
     RANDOM_SEED         = 31
 
     def _fitness(self, G, path: list) -> float:
+        """Objective: total path length in metres (lower = better)."""
         return _ga_path_distance(G, path)
 
     @staticmethod
     def _frame(G, gen_idx: int, best: list, candidate: list) -> dict:
-        coords = []
-        for n in best:
-            node = G.nodes.get(n)
-            if node:
-                coords.append([round(float(node["y"]), 5),
-                               round(float(node["x"]), 5)])
-
-        candidate_coords = []
-        for n in candidate:
-            node = G.nodes.get(n)
-            if node:
-                candidate_coords.append([round(float(node["y"]), 5),
-                                         round(float(node["x"]), 5)])
+        """
+        Capture the state of one SA iteration for the evolution log viewer.
+        Records coordinates and street names for both the current best path
+        and the candidate (proposed neighbour) path.
+        """
+        def to_coords(path):
+            result = []
+            for n in path:
+                node = G.nodes.get(n)
+                if node:
+                    result.append([round(float(node["y"]), 5),
+                                   round(float(node["x"]), 5)])
+            return result
 
         return {
-            "gen": gen_idx + 1,
-            "min": round(_ga_path_cost(G, best) / 60, 3),
-            "dist": round(_ga_path_distance(G, best) / 1000, 3),
-            "coords": coords,
-            "streets": _route_streets(G, best),
-            "candidate_min": round(_ga_path_cost(G, candidate) / 60, 3),
-            "candidate_dist": round(_ga_path_distance(G, candidate) / 1000, 3),
-            "candidate_coords": candidate_coords,
+            "gen":              gen_idx + 1,
+            "min":              round(_ga_path_cost(G, best) / 60, 3),
+            "dist":             round(_ga_path_distance(G, best) / 1000, 3),
+            "coords":           to_coords(best),
+            "streets":          _route_streets(G, best),
+            "candidate_min":    round(_ga_path_cost(G, candidate) / 60, 3),
+            "candidate_dist":   round(_ga_path_distance(G, candidate) / 1000, 3),
+            "candidate_coords": to_coords(candidate),
             "candidate_streets": _route_streets(G, candidate),
         }
 
     def find_route(self, G, source_node, target_node, scenario_name=""):
-        t0 = time.perf_counter()
+        """
+        Run Simulated Annealing from source_node to target_node.
+
+        Starts from a noisy shortest-path (to avoid a trivial starting point),
+        then iteratively proposes sub-segment re-routes. Accepts improvements
+        always; accepts degradations with decreasing probability as T cools.
+        """
+        t0  = time.perf_counter()
         rng = random.Random(self.RANDOM_SEED)
 
+        # Initial solution: noisy shortest path (not the global optimum)
         current = _sa_noisy_shortest_path(G, source_node, target_node, rng)
         if not current:
+            # Fallback: clean shortest path if noisy version fails
             try:
-                current = nx.shortest_path(
-                    G, source_node, target_node, weight="length"
-                )
+                current = nx.shortest_path(G, source_node, target_node, weight="length")
             except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
                 ms = (time.perf_counter() - t0) * 1000
                 return RouteResult.failure(
                     self.name, scenario_name, source_node, target_node, str(e), ms
                 )
 
-        best = current[:]
+        best          = current[:]
         current_score = self._fitness(G, current)
-        best_score = current_score
-        temperature = self.INITIAL_TEMPERATURE
-        gen_history = []
+        best_score    = current_score
+        temperature   = self.INITIAL_TEMPERATURE
+        gen_history   = []
 
         for idx in range(self.ITERATIONS):
-            candidate = _sa_neighbor_path(G, current, rng)
+            # Propose a neighbour by re-routing a random sub-segment
+            candidate       = _sa_neighbor_path(G, current, rng)
             candidate_score = self._fitness(G, candidate)
-            delta = candidate_score - current_score
+            delta           = candidate_score - current_score
 
+            # Accept if better, or probabilistically if worse (Metropolis criterion)
             accept = delta <= 0
             if not accept and temperature > self.MIN_TEMPERATURE:
                 accept_prob = math.exp(-delta / temperature)
-                accept = rng.random() < accept_prob
+                accept      = rng.random() < accept_prob
 
             if accept:
-                current = candidate
+                current       = candidate
                 current_score = candidate_score
 
+            # Always track the global best seen so far
             if current_score < best_score:
-                best = current[:]
+                best       = current[:]
                 best_score = current_score
 
             gen_history.append(self._frame(G, idx, best, candidate))
-            temperature = max(self.MIN_TEMPERATURE,
-                              temperature * self.COOLING_RATE)
+
+            # Cool down — multiplicative geometric cooling
+            temperature = max(self.MIN_TEMPERATURE, temperature * self.COOLING_RATE)
 
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(
             G, self.name, scenario_name, source_node, target_node, best, ms,
             metadata={
-                "algorithm_family": "simulated_annealing",
-                "generations": self.ITERATIONS,
-                "population": 1,
+                "algorithm_family":   "simulated_annealing",
+                "generations":        self.ITERATIONS,
+                "population":         1,   # SA has no population — just one current solution
                 "initial_temperature": self.INITIAL_TEMPERATURE,
-                "cooling_rate": self.COOLING_RATE,
-                "min_temperature": self.MIN_TEMPERATURE,
-                "mutation_rate": 1.0,
-                "gen_history": gen_history,
+                "cooling_rate":       self.COOLING_RATE,
+                "min_temperature":    self.MIN_TEMPERATURE,
+                "mutation_rate":      1.0,  # SA always proposes a neighbour each step
+                "gen_history":        gen_history,
             },
         )
 
 
-# EXAMPLE SCENARIOS
-# Rute konkret pakai fasilitas publik Surabaya beneran.
-# Dipakai benchmark sebagai gantinya auto-generate random.
+# ══════════════════════════════════════════════════════════════════
+# SECTION 7: PARTICLE SWARM OPTIMIZATION (PSO)
 #
-# Node ID diambil dari data/facilities_with_network.csv
-# Bisa cek di data/surabaya_facilities_map.html untuk visualnya.
+# Each "particle" represents a candidate path. Particles move through
+# the solution space guided by their own best-known position (personal
+# best) and the swarm's overall best (global best). The blend of
+# inertia, personal memory, and social influence navigates the search.
 #
-# PETA SKENARIO:
-#   1. darmo_to_rsu_haji          RS Darmo (tengah-barat)
-#                                    → RSU Haji Surabaya (timur)
-#                                    Kasus: transfer pasien antar RS
-#
-#   2. polsek_genteng_to_rs_darmo  Polsek Genteng (pusat kota)
-#                                    → RS Darmo
-#                                    Kasus: respons darurat polisi → RS
-#
-#   3. national_to_rs_ramelan      National Hospital (barat jauh)
-#                                    → RS Ramelan (selatan)
-#                                    Kasus: lintas kota barat→selatan
-#
-#   4. polsek_rungkut_to_rs_onkologi  Polsek Rungkut (timur-selatan)
-#                                      → RS Onkologi (timur)
-#                                      Kasus: respons darurat area timur
-#
-#   5. ciputra_to_rsu_haji         Ciputra Hospital (barat jauh)
-#                                    → RSU Haji Surabaya (timur)
-#                                    Kasus: rute terpanjang lintas kota
-# ──────────────────────────────────────────────────────────────
+# Adapted to discrete path spaces: "velocity" is implemented as
+# probabilistic segment splicing from personal and global bests,
+# followed by repair to ensure the path is road-valid.
+# ══════════════════════════════════════════════════════════════════
+
+def _pso_path_cost(G, path: list) -> float:
+    """Total travel_time (seconds) for a PSO candidate path."""
+    total = 0.0
+    for u, v in zip(path[:-1], path[1:]):
+        data = G.get_edge_data(u, v)
+        if data is None:
+            return float("inf")
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        total += float(best.get("travel_time", 9999))
+    return total
+
+
+def _pso_random_path(G, source: int, target: int, rng: random.Random):
+    """
+    Generate one swarm particle (initial path) via noisy Dijkstra.
+    Higher noise range than GA to create more initial diversity in the swarm.
+    """
+    def noisy_weight(u, v, data):
+        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        t = float(best.get("travel_time", 9999))
+        return t * rng.uniform(0.5, 1.8)   # wider noise for more initial diversity
+
+    try:
+        return nx.shortest_path(G, source, target, weight=noisy_weight)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return None
+
+
+def _pso_repair_path(G, partial_nodes: list):
+    """
+    Repair a potentially disconnected waypoint sequence into a valid road path.
+
+    PSO segment mixing may produce a list of node IDs that are not consecutive
+    neighbours on the graph. This function connects each consecutive pair
+    with its shortest road path, producing a valid routable path.
+
+    Returns None if any segment is unreachable (broken graph connection).
+    """
+    if len(partial_nodes) < 2:
+        return partial_nodes if partial_nodes else None
+
+    # Deduplicate consecutive identical nodes (they add no new road)
+    cleaned = [partial_nodes[0]]
+    for n in partial_nodes[1:]:
+        if n != cleaned[-1]:
+            cleaned.append(n)
+    if len(cleaned) < 2:
+        return cleaned
+
+    full_path = []
+    for u, v in zip(cleaned[:-1], cleaned[1:]):
+        try:
+            seg = nx.shortest_path(G, u, v, weight="travel_time")
+        except (nx.NetworkXNoPath, nx.NodeNotFound):
+            return None   # can't repair this gap
+        if not full_path:
+            full_path.extend(seg)
+        else:
+            full_path.extend(seg[1:])   # skip duplicate junction
+
+    return full_path if full_path else None
+
+
+def _pso_mix_paths(G, current: list, personal_best: list, global_best: list,
+                   inertia_w: float, cognitive_w: float, social_w: float,
+                   rng: random.Random):
+    """
+    Discrete PSO position update via path segment mixing.
+
+    Analogous to the continuous PSO velocity equation:
+      new_pos = inertia*current + cognitive*(personal_best - current)
+                                + social*(global_best - current)
+
+    Here "addition" means probabilistically splicing segments from each source:
+      - Inertia:    keep a slice of the current path (momentum)
+      - Cognitive:  pull toward the particle's personal best
+      - Social:     pull toward the global best
+
+    The combined waypoints are then repaired into a valid road path.
+    """
+    source, target = current[0], current[-1]
+    waypoints = [source]
+
+    # Inertia: keep some intermediate nodes from the current path
+    if len(current) > 2 and rng.random() < inertia_w:
+        n_keep    = max(1, int(len(current) * rng.uniform(0.2, 0.5)))
+        start_idx = rng.randint(1, max(1, len(current) - n_keep - 1))
+        waypoints.extend(current[start_idx:start_idx + n_keep])
+
+    # Cognitive: pull toward personal best
+    if len(personal_best) > 2 and rng.random() < cognitive_w:
+        n_take    = max(1, int(len(personal_best) * rng.uniform(0.15, 0.4)))
+        start_idx = rng.randint(1, max(1, len(personal_best) - n_take - 1))
+        waypoints.extend(personal_best[start_idx:start_idx + n_take])
+
+    # Social: pull toward global best
+    if len(global_best) > 2 and rng.random() < social_w:
+        n_take    = max(1, int(len(global_best) * rng.uniform(0.15, 0.4)))
+        start_idx = rng.randint(1, max(1, len(global_best) - n_take - 1))
+        waypoints.extend(global_best[start_idx:start_idx + n_take])
+
+    waypoints.append(target)
+
+    # Remove consecutive duplicates before repair
+    cleaned = [waypoints[0]]
+    for n in waypoints[1:]:
+        if n != cleaned[-1]:
+            cleaned.append(n)
+
+    return _pso_repair_path(G, cleaned)   # may return None if repair fails
+
+
+def _pso_mutate(G, path: list, rng: random.Random) -> list:
+    """
+    Random sub-segment mutation for PSO particles.
+    Re-routes a random slice via noisy shortest_path to inject diversity
+    and prevent swarm stagnation.
+    """
+    if len(path) < 3:
+        return path
+    i = rng.randint(0, len(path) - 2)
+    j = rng.randint(i + 1, min(i + max(len(path) // 4, 2), len(path) - 1))
+    try:
+        def noisy_weight(u, v, data):
+            best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+            t = float(best.get("travel_time", 9999))
+            return t * rng.uniform(0.6, 1.6)
+        seg = nx.shortest_path(G, path[i], path[j], weight=noisy_weight)
+        return path[:i] + seg + path[j + 1:]
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return path   # mutation failed — keep original
+
+
+class ParticleSwarmRouting(BaseRoutingAlgorithm):
+    """
+    Particle Swarm Optimization (PSO) for point-to-point routing.
+
+    Each of the N_PARTICLES particles is a candidate path.
+    Particles update by blending segments from their personal best
+    and the global best, governed by inertia, cognitive, and social weights.
+    Random mutation prevents premature convergence.
+    """
+    name        = "particle_swarm"
+    description = "Particle Swarm Optimization — segment-mixing swarm on road paths"
+
+    # ── PSO parameters ────────────────────────────────────────────────────
+    N_PARTICLES      = 40    # swarm size — more particles → broader search
+    N_ITERATIONS     = 80    # number of update rounds
+    INERTIA_WEIGHT   = 0.5   # how much of the current path to retain
+    COGNITIVE_WEIGHT = 1.2   # pull toward particle's personal best
+    SOCIAL_WEIGHT    = 1.4   # pull toward swarm's global best (slightly stronger)
+    MUTATION_RATE    = 0.25  # probability of random sub-segment mutation each step
+    RANDOM_SEED      = 42
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+        """Run PSO and return the best path found by the swarm."""
+        t0  = time.perf_counter()
+        rng = random.Random(self.RANDOM_SEED)
+
+        # ── 1. Initialise swarm ───────────────────────────────────────────
+        particles      = []   # current path per particle
+        personal_bests = []   # best-ever path per particle
+        personal_costs = []   # cost of each particle's personal best
+
+        for _ in range(self.N_PARTICLES):
+            p = _pso_random_path(G, source_node, target_node, rng)
+            if p:
+                cost = _pso_path_cost(G, p)
+                particles.append(p)
+                personal_bests.append(p[:])
+                personal_costs.append(cost)
+
+        # Fallback: if the entire swarm failed to initialise, use Dijkstra
+        if not particles:
+            try:
+                route = nx.shortest_path(G, source_node, target_node,
+                                         weight="travel_time")
+            except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+                ms = (time.perf_counter() - t0) * 1000
+                return RouteResult.failure(self.name, scenario_name,
+                                           source_node, target_node, str(e), ms)
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.build(G, self.name, scenario_name,
+                                     source_node, target_node, route, ms,
+                                     {"strategy": "fallback_dijkstra"})
+
+        # Identify the initial global best
+        global_best_idx  = min(range(len(particles)), key=lambda i: personal_costs[i])
+        global_best_path = personal_bests[global_best_idx][:]
+        global_best_cost = personal_costs[global_best_idx]
+
+        # ── 2. Swarm iteration ────────────────────────────────────────────
+        for _ in range(self.N_ITERATIONS):
+            for i in range(len(particles)):
+                # Update particle position by mixing current, personal, and global bests
+                new_path = _pso_mix_paths(
+                    G, particles[i], personal_bests[i], global_best_path,
+                    self.INERTIA_WEIGHT, self.COGNITIVE_WEIGHT, self.SOCIAL_WEIGHT,
+                    rng,
+                )
+
+                if new_path is None:
+                    new_path = particles[i]   # repair failed — keep current path
+
+                # Optional random mutation to escape local optima
+                if rng.random() < self.MUTATION_RATE:
+                    new_path = _pso_mutate(G, new_path, rng)
+
+                new_cost    = _pso_path_cost(G, new_path)
+                particles[i] = new_path
+
+                # Update personal best
+                if new_cost < personal_costs[i]:
+                    personal_bests[i] = new_path[:]
+                    personal_costs[i] = new_cost
+
+                    # Update global best
+                    if new_cost < global_best_cost:
+                        global_best_path = new_path[:]
+                        global_best_cost = new_cost
+
+        # ── 3. Return the global best path found ──────────────────────────
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name,
+            source_node, target_node, global_best_path, ms,
+            metadata={
+                "n_particles":      self.N_PARTICLES,
+                "n_iterations":     self.N_ITERATIONS,
+                "inertia_weight":   self.INERTIA_WEIGHT,
+                "cognitive_weight": self.COGNITIVE_WEIGHT,
+                "social_weight":    self.SOCIAL_WEIGHT,
+                "mutation_rate":    self.MUTATION_RATE,
+                "strategy":         "discrete_path_pso",
+            },
+        )
+
+
+# ══════════════════════════════════════════════════════════════════
+# LEGACY SINGLE-STOP SCENARIOS
+# Concrete point-to-point scenarios between real Surabaya facilities.
+# Kept as reference; not used by the default benchmark.
+# ══════════════════════════════════════════════════════════════════
 
 _LEGACY_SINGLE_STOP_SCENARIOS = [
     Scenario(
         name="darmo_to_rsu_haji",
         description="Transfer pasien: RS Darmo (tengah-barat) → RSU Haji Surabaya (timur)",
-        source_node=1685220157,
-        target_node=4332874690,
-        source_label="RS Darmo",
-        target_label="RSU Haji Surabaya",
-        source_coords=(-7.2874, 112.7382),
-        target_coords=(-7.2828, 112.7798),
+        source_node=1685220157,  target_node=4332874690,
+        source_label="RS Darmo", target_label="RSU Haji Surabaya",
+        source_coords=(-7.2874, 112.7382), target_coords=(-7.2828, 112.7798),
     ),
     Scenario(
         name="polsek_genteng_to_rs_darmo",
         description="Respons darurat: Polsek Genteng (pusat) → RS Darmo",
-        source_node=5589485735,
-        target_node=1685220157,
-        source_label="Polsek Genteng",
-        target_label="RS Darmo",
-        source_coords=(-7.2556, 112.7483),
-        target_coords=(-7.2874, 112.7382),
+        source_node=5589485735,  target_node=1685220157,
+        source_label="Polsek Genteng", target_label="RS Darmo",
+        source_coords=(-7.2556, 112.7483), target_coords=(-7.2874, 112.7382),
     ),
     Scenario(
         name="national_to_rs_ramelan",
         description="Lintas kota barat→selatan: National Hospital → RS Ramelan",
-        source_node=1721014942,
-        target_node=1719470350,
-        source_label="National Hospital",
-        target_label="RS Angkatan Laut Dr. Ramelan",
-        source_coords=(-7.2993, 112.6764),
-        target_coords=(-7.3093, 112.7382),
+        source_node=1721014942,  target_node=1719470350,
+        source_label="National Hospital", target_label="RS Angkatan Laut Dr. Ramelan",
+        source_coords=(-7.2993, 112.6764), target_coords=(-7.3093, 112.7382),
     ),
     Scenario(
         name="polsek_rungkut_to_rs_onkologi",
         description="Respons darurat area timur: Polsek Rungkut → RS Onkologi",
-        source_node=4574365996,
-        target_node=7059452149,
-        source_label="Polsek Rungkut",
-        target_label="RS Onkologi",
-        source_coords=(-7.3384, 112.7712),
-        target_coords=(-7.2909, 112.7893),
+        source_node=4574365996,  target_node=7059452149,
+        source_label="Polsek Rungkut", target_label="RS Onkologi",
+        source_coords=(-7.3384, 112.7712), target_coords=(-7.2909, 112.7893),
     ),
     Scenario(
         name="ciputra_to_rsu_haji",
         description="Rute terpanjang lintas kota: Ciputra Hospital (barat jauh) → RSU Haji (timur)",
-        source_node=4163428113,
-        target_node=4332874690,
-        source_label="Ciputra Hospital",
-        target_label="RSU Haji Surabaya",
-        source_coords=(-7.2809, 112.6346),
-        target_coords=(-7.2828, 112.7798),
+        source_node=4163428113,  target_node=4332874690,
+        source_label="Ciputra Hospital", target_label="RSU Haji Surabaya",
+        source_coords=(-7.2809, 112.6346), target_coords=(-7.2828, 112.7798),
     ),
     Scenario(
         name="benowo_to_onkologi",
         description="EXTREME lintas kota: Polsek Benowo (barat jauh) → RS Onkologi (timur) ~19km",
-        source_node=5539027568,
-        target_node=7059452149,
-        source_label="Polsek Benowo",
-        target_label="RS Onkologi",
-        source_coords=(-7.2359, 112.6076),
-        target_coords=(-7.2909, 112.7893),
+        source_node=5539027568,  target_node=7059452149,
+        source_label="Polsek Benowo", target_label="RS Onkologi",
+        source_coords=(-7.2359, 112.6076), target_coords=(-7.2909, 112.7893),
     ),
 ]
 
 
-# ──────────────────────────────────────────────────────────────
-# SKELETON — copy this to add a new algorithm
-# ──────────────────────────────────────────────────────────────
-#
-# class MyAlgorithm(BaseRoutingAlgorithm):
-#     name        = "my_algo"           # must be unique
-#     description = "One-line summary"
-#
-#     def find_route(self, G, source_node, target_node, scenario_name=""):
-#         t0 = time.perf_counter()
-#         try:
-#             route    = []     # your list of node IDs
-#             metadata = {}     # optional extra info
-#         except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-#             ms = (time.perf_counter() - t0) * 1000
-#             return RouteResult.failure(self.name, scenario_name,
-#                                        source_node, target_node, str(e), ms)
-#         ms = (time.perf_counter() - t0) * 1000
-#         return RouteResult.build(G, self.name, scenario_name,
-#                                  source_node, target_node, route, ms, metadata)
+# ══════════════════════════════════════════════════════════════════
+# EXAMPLE MULTI-STOP SCENARIOS
+# Pre-defined multi-stop tours using known Surabaya facility nodes.
+# Can be used instead of (or alongside) the category-based scenarios.
+# ══════════════════════════════════════════════════════════════════
 
-
+# Known facility node IDs extracted from OSM / facilities_with_network.csv
 _SCENARIO_POINTS = {
-    "rs_darmo": {
-        "label": "RS Darmo",
-        "node": 1685220157,
-        "coords": (-7.2874, 112.7382),
-    },
-    "rsu_haji": {
-        "label": "RSU Haji Surabaya",
-        "node": 4332874690,
-        "coords": (-7.2828, 112.7798),
-    },
-    "polsek_genteng": {
-        "label": "Polsek Genteng",
-        "node": 5589485735,
-        "coords": (-7.2556, 112.7483),
-    },
-    "national": {
-        "label": "National Hospital",
-        "node": 1721014942,
-        "coords": (-7.2993, 112.6764),
-    },
-    "rs_ramelan": {
-        "label": "RS Angkatan Laut Dr. Ramelan",
-        "node": 1719470350,
-        "coords": (-7.3093, 112.7382),
-    },
-    "polsek_rungkut": {
-        "label": "Polsek Rungkut",
-        "node": 4574365996,
-        "coords": (-7.3384, 112.7712),
-    },
-    "rs_onkologi": {
-        "label": "RS Onkologi",
-        "node": 7059452149,
-        "coords": (-7.2909, 112.7893),
-    },
-    "ciputra": {
-        "label": "Ciputra Hospital",
-        "node": 4163428113,
-        "coords": (-7.2809, 112.6346),
-    },
-    "polsek_benowo": {
-        "label": "Polsek Benowo",
-        "node": 5539027568,
-        "coords": (-7.2359, 112.6076),
-    },
+    "rs_darmo":        {"label": "RS Darmo",                       "node": 1685220157, "coords": (-7.2874, 112.7382)},
+    "rsu_haji":        {"label": "RSU Haji Surabaya",              "node": 4332874690, "coords": (-7.2828, 112.7798)},
+    "polsek_genteng":  {"label": "Polsek Genteng",                 "node": 5589485735, "coords": (-7.2556, 112.7483)},
+    "national":        {"label": "National Hospital",              "node": 1721014942, "coords": (-7.2993, 112.6764)},
+    "rs_ramelan":      {"label": "RS Angkatan Laut Dr. Ramelan",   "node": 1719470350, "coords": (-7.3093, 112.7382)},
+    "polsek_rungkut":  {"label": "Polsek Rungkut",                 "node": 4574365996, "coords": (-7.3384, 112.7712)},
+    "rs_onkologi":     {"label": "RS Onkologi",                    "node": 7059452149, "coords": (-7.2909, 112.7893)},
+    "ciputra":         {"label": "Ciputra Hospital",               "node": 4163428113, "coords": (-7.2809, 112.6346)},
+    "polsek_benowo":   {"label": "Polsek Benowo",                  "node": 5539027568, "coords": (-7.2359, 112.6076)},
 }
 
 
-def _multi_stop_scenario(
-    name: str, description: str, point_keys: list, round_trip: bool = False
-) -> Scenario:
+def _multi_stop_scenario(name: str, description: str,
+                         point_keys: list, round_trip: bool = False) -> Scenario:
+    """Build a multi-stop Scenario from named facility keys."""
     points = [_SCENARIO_POINTS[k] for k in point_keys]
-    nodes = [p["node"] for p in points]
-    labels = [p["label"] for p in points]
+    nodes  = [p["node"]   for p in points]
+    labels = [p["label"]  for p in points]
     coords = [p["coords"] for p in points]
     return Scenario(
-        name=name,
-        description=description,
-        source_node=nodes[0],
-        target_node=nodes[-1],
-        source_label=labels[0],
-        target_label=labels[-1],
-        source_coords=coords[0],
-        target_coords=coords[-1],
-        route_nodes=nodes,
-        route_labels=labels,
-        route_coords=coords,
+        name=name, description=description,
+        source_node=nodes[0],  target_node=nodes[-1],
+        source_label=labels[0], target_label=labels[-1],
+        source_coords=coords[0], target_coords=coords[-1],
+        route_nodes=nodes, route_labels=labels, route_coords=coords,
+        round_trip=round_trip,
     )
 
 
 EXAMPLE_SCENARIOS = [
-    # ── 5-stop (baseline complexity) ─────────────────────────────
+    # ── 5-stop scenarios ──────────────────────────────────────────────────
     _multi_stop_scenario(
         "emergency_west_to_east_5",
         "5-stop: emergency corridor from far-west Surabaya to eastern hospitals",
@@ -1948,14 +2018,14 @@ EXAMPLE_SCENARIOS = [
         ["polsek_genteng", "rs_darmo", "rs_ramelan", "polsek_rungkut", "rs_onkologi"],
         round_trip=True,
     ),
-    # ── 7-stop (complicated) ──────────────────────────────────────
+    # ── 7-stop scenario ───────────────────────────────────────────────────
     _multi_stop_scenario(
         "cross_city_zigzag_7",
         "7-stop: full cross-city zigzag — far-west to far-east via north, center, and south",
         ["polsek_benowo", "national", "polsek_genteng", "rs_darmo",
          "rs_ramelan", "rsu_haji", "rs_onkologi"],
     ),
-    # ── 9-stop round trip (very complicated) ─────────────────────
+    # ── 9-stop round trip ─────────────────────────────────────────────────
     _multi_stop_scenario(
         "full_city_patrol_9",
         "9-stop: all-facilities full-city patrol with return to base — hardest scenario",

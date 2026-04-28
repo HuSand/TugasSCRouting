@@ -18,11 +18,9 @@ log = logging.getLogger(__name__)
 
 ALL_COLORS = {
     "ga":             "#E63946",
-    "aco_routing":    "#FF9800",
     "gerald_sa":      "#D81B60",
     "particle_swarm": "#2196F3",
-    "antColony_elite":"#000000",
-    "antColony_pro":  "#D3BA3F",
+    "aco_elite_pro":   "#000000",
 }
 
 

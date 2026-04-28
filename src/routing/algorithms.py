@@ -44,6 +44,8 @@ import logging
 import time
 import math
 import random
+import heapq
+import itertools
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import networkx as nx
 
@@ -958,6 +960,850 @@ class BurhanGA(BaseRoutingAlgorithm):
         return _ga_run(self, G, source_node, target_node, scenario_name)
 
 
+class AntColonyPrime(BaseRoutingAlgorithm):
+   
+    name        = "aco_prime"
+    description = (
+        "ACO-Prime — TSP-level tour optimization + BiDijkstra segment routing "
+        "+ Or-opt/3-opt post-processing"
+    )
+
+    # ──────────────────────────────────────────────────────────────────
+    # PARAMETER ACO-TSP
+    # ──────────────────────────────────────────────────────────────────
+    N_ANTS          = 30     # semut lebih banyak untuk ruang solusi TSP yang besar
+                             # TSP dengan 50 kota punya (50-1)!/2 ≈ 3×10^62 solusi
+    N_ITERATIONS    = 50     # iterasi lebih banyak — TSP butuh konvergensi panjang
+    ALPHA           = 1.0    # bobot feromon τ
+    BETA            = 4.0    # bobot visibilitas η — lebih tinggi untuk TSP
+                             # (greedy jarak penting di TSP)
+    RHO             = 0.1    # laju evaporasi
+    Q               = 1.0    # konstanta deposit (dinormalisasi per tour cost)
+
+    # MMAS bounds
+    TAU_INIT        = 1.0
+    MMAS_RATIO      = 0.02   # lebih ketat dari point-to-point (2% dari tau_max)
+    TAU_MIN_FLOOR   = 1e-6
+
+    # Rank-based deposit
+    W_RANK          = 6      # top-6 semut deposit (dari 30 semut)
+
+    # Nearest-neighbor candidate list untuk TSP
+    # Setiap waypoint hanya mempertimbangkan NN_CANDIDATES tetangga terdekat
+    # → mengurangi ruang keputusan dari O(N²) ke O(N×K) tanpa kehilangan kualitas
+    NN_CANDIDATES   = 10     # top-10 nearest neighbors per waypoint
+
+    # Post-processing
+    OR_OPT_PASSES   = 3      # jumlah pass Or-opt
+    USE_3OPT        = True   # aktifkan 3-opt (lebih kuat dari 2-opt tapi lebih lambat)
+    LK_MOVES        = True   # aktifkan Lin-Kernighan style moves
+
+    # Segment routing (per pair waypoint)
+    USE_BIDIRECTIONAL = True  # gunakan BiDijkstra (lebih cepat dari Dijkstra standar)
+    SEGMENT_CACHE     = True  # cache hasil routing antar waypoint
+
+    RANDOM_SEED     = 42
+
+    # ──────────────────────────────────────────────────────────────────
+    def __init__(self):
+        self._hav_cache: dict     = {}
+        self._segment_cache: dict = {}  # cache BiDijkstra hasil per (u,v) pair
+
+    # ══════════════════════════════════════════════════════════════════
+    # LAYER 2: SEGMENT ROUTING — Bidirectional Dijkstra
+    # ══════════════════════════════════════════════════════════════════
+
+    def _bidirectional_dijkstra(self, G, source: int, target: int) -> tuple[float, list]:
+        # Cek cache dulu
+        cache_key = (source, target)
+        if self.SEGMENT_CACHE and cache_key in self._segment_cache:
+            return self._segment_cache[cache_key]
+
+        # Edge case
+        if source == target:
+            return 0.0, [source]
+
+        # ── Forward search dari source ──
+        # dist_f[v] = jarak terpendek source → v yang sudah ditemukan
+        dist_f  = {source: 0.0}
+        prev_f  = {source: None}
+        heap_f  = [(0.0, source)]
+
+        # ── Backward search dari target ──
+        # dist_b[v] = jarak terpendek target → v di reverse graph
+        # (ekuivalen dengan v → target di graph asli)
+        dist_b  = {target: 0.0}
+        prev_b  = {target: None}
+        heap_b  = [(0.0, target)]
+
+        visited_f: set = set()
+        visited_b: set = set()
+
+        best_cost = float("inf")
+        meeting   = None
+
+        def _reconstruct(meet: int) -> list:
+            # Rekonstruksi path dari source ke target via meeting node
+            path_f = []
+            node = meet
+            while node is not None:
+                path_f.append(node)
+                node = prev_f.get(node)
+            path_f.reverse()
+
+            path_b = []
+            node = prev_b.get(meet)
+            while node is not None:
+                path_b.append(node)
+                node = prev_b.get(node)
+
+            return path_f + path_b
+
+        # ── Main loop: bergantian forward dan backward ──
+        while heap_f or heap_b:
+            # Step forward
+            if heap_f:
+                cost_f, u = heapq.heappop(heap_f)
+                if u not in visited_f:
+                    visited_f.add(u)
+
+                    # Cek apakah u sudah dijangkau dari backward
+                    if u in dist_b:
+                        total = cost_f + dist_b[u]
+                        if total < best_cost:
+                            best_cost = total
+                            meeting   = u
+
+                    # Pruning: jika cost sudah >= best_cost, stop
+                    if cost_f >= best_cost:
+                        heap_f = []
+                    else:
+                        for v in G.successors(u):
+                            if v in visited_f:
+                                continue
+                            ed = G.get_edge_data(u, v)
+                            if not ed:
+                                continue
+                            tt = min(float(d.get("travel_time", 9999)) for d in ed.values())
+                            new_cost = cost_f + tt
+                            if new_cost < dist_f.get(v, float("inf")):
+                                dist_f[v] = new_cost
+                                prev_f[v] = u
+                                heapq.heappush(heap_f, (new_cost, v))
+
+            # Step backward (di reverse graph: predecessor sebagai successor)
+            if heap_b:
+                cost_b, u = heapq.heappop(heap_b)
+                if u not in visited_b:
+                    visited_b.add(u)
+
+                    if u in dist_f:
+                        total = dist_f[u] + cost_b
+                        if total < best_cost:
+                            best_cost = total
+                            meeting   = u
+
+                    if cost_b >= best_cost:
+                        heap_b = []
+                    else:
+                        # Backward: ikuti predecessor di graph asli
+                        for v in G.predecessors(u):
+                            if v in visited_b:
+                                continue
+                            ed = G.get_edge_data(v, u)
+                            if not ed:
+                                continue
+                            tt = min(float(d.get("travel_time", 9999)) for d in ed.values())
+                            new_cost = cost_b + tt
+                            if new_cost < dist_b.get(v, float("inf")):
+                                dist_b[v] = new_cost
+                                prev_b[v] = u
+                                heapq.heappush(heap_b, (new_cost, v))
+
+        if meeting is None or best_cost == float("inf"):
+            # Fallback ke nx.shortest_path jika BiDijkstra gagal
+            try:
+                path = nx.shortest_path(G, source, target, weight="travel_time")
+                cost = sum(
+                    min(float(d.get("travel_time", 9999))
+                        for d in G.get_edge_data(u, v).values())
+                    for u, v in zip(path[:-1], path[1:])
+                )
+            except Exception:
+                return float("inf"), []
+            result = (cost, path)
+        else:
+            result = (best_cost, _reconstruct(meeting))
+
+        if self.SEGMENT_CACHE:
+            self._segment_cache[cache_key] = result
+        return result
+
+    # ══════════════════════════════════════════════════════════════════
+    # LAYER 1: DISTANCE MATRIX PRE-COMPUTATION
+    # ══════════════════════════════════════════════════════════════════
+
+    def _build_distance_matrix(
+        self,
+        G,
+        waypoints: list[int]
+    ) -> tuple[list[list[float]], list[list[list]]]:
+        n = len(waypoints)
+        dist_matrix = [[float("inf")] * n for _ in range(n)]
+        path_matrix = [[[] for _ in range(n)] for _ in range(n)]
+
+        for i in range(n):
+            dist_matrix[i][i] = 0.0
+            path_matrix[i][i] = [waypoints[i]]
+            for j in range(n):
+                if i == j:
+                    continue
+                cost, path = self._bidirectional_dijkstra(
+                    G, waypoints[i], waypoints[j]
+                )
+                dist_matrix[i][j] = cost
+                path_matrix[i][j] = path
+
+        return dist_matrix, path_matrix
+
+    # ══════════════════════════════════════════════════════════════════
+    # LAYER 1: NEAREST-NEIGHBOR CANDIDATE LISTS (untuk TSP)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _build_nn_candidates(
+        self,
+        dist_matrix: list[list[float]],
+        n: int
+    ) -> list[list[int]]:
+        nn_cands = []
+        for i in range(n):
+            neighbors = sorted(
+                [j for j in range(n) if j != i and dist_matrix[i][j] < float("inf")],
+                key=lambda j: dist_matrix[i][j]
+            )
+            nn_cands.append(neighbors[:self.NN_CANDIDATES])
+        return nn_cands
+
+    # ══════════════════════════════════════════════════════════════════
+    # LAYER 1: ACO-TSP — BANGUN TOUR SATU SEMUT
+    # ══════════════════════════════════════════════════════════════════
+
+    def _build_ant_tour(
+        self,
+        n: int,
+        start: int,
+        pheromone: list[list[float]],
+        dist_matrix: list[list[float]],
+        nn_cands: list[list[int]],
+        tau_min: float,
+        rng: random.Random
+    ) -> list[int] | None:
+
+        visited    = [False] * n
+        tour       = [start]
+        visited[start] = True
+        current    = start
+
+        for step in range(n - 1):
+            # Ambil kandidat dari nearest-neighbor list yang belum dikunjungi
+            candidates = [j for j in nn_cands[current] if not visited[j]]
+
+            # Fallback: jika semua nn_cands sudah dikunjungi, coba semua node
+            if not candidates:
+                candidates = [j for j in range(n) if not visited[j]
+                              and dist_matrix[current][j] < float("inf")]
+
+            if not candidates:
+                return None  # graph tidak terhubung, tour tidak bisa selesai
+
+            # Hitung probabilitas transisi
+            scores = []
+            for j in candidates:
+                tau = max(pheromone[current][j], tau_min)
+                dist = dist_matrix[current][j]
+                if dist <= 0:
+                    eta = 1e9
+                else:
+                    eta = 1.0 / dist
+                score = (tau ** self.ALPHA) * (eta ** self.BETA)
+                scores.append(score)
+
+            total = sum(scores)
+            if total <= 0:
+                # Uniform fallback
+                chosen = rng.choice(candidates)
+            else:
+                # Roulette wheel selection
+                probs  = [s / total for s in scores]
+                r      = rng.random()
+                cumul  = 0.0
+                chosen = candidates[-1]
+                for j, prob in zip(candidates, probs):
+                    cumul += prob
+                    if r <= cumul:
+                        chosen = j
+                        break
+
+            tour.append(chosen)
+            visited[chosen] = True
+            current = chosen
+
+        # Kembali ke start (complete tour, tapi kita tidak tambahkan
+        # karena framework tidak butuh kembali ke asal)
+        return tour
+
+    def _tour_cost(
+        self,
+        tour: list[int],
+        dist_matrix: list[list[float]]
+    ) -> float:
+        """Total travel_time dari tour (urutan waypoint indices)."""
+        total = 0.0
+        for i in range(len(tour) - 1):
+            c = dist_matrix[tour[i]][tour[i + 1]]
+            if c == float("inf"):
+                return float("inf")
+            total += c
+        return total
+
+    # ══════════════════════════════════════════════════════════════════
+    # LAYER 1: MMAS PHEROMONE MANAGEMENT (untuk matrix NxN)
+    # ══════════════════════════════════════════════════════════════════
+
+    def _compute_mmas_bounds(self, best_cost: float, n: int) -> tuple[float, float]:
+
+        tau_max = self.Q / best_cost if best_cost > 0 else self.Q
+        tau_min = max(tau_max * self.MMAS_RATIO, self.TAU_MIN_FLOOR)
+        return tau_max, tau_min
+
+    def _evaporate_matrix(
+        self,
+        pheromone: list[list[float]],
+        tau_min: float,
+        tau_max: float,
+        n: int
+    ) -> None:
+        """
+        Evaporasi feromon pada matrix NxN + clamp ke [tau_min, tau_max].
+        O(N²) — untuk N=50 ini 2500 operasi, sangat cepat.
+        """
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                pheromone[i][j] *= (1.0 - self.RHO)
+                if pheromone[i][j] < tau_min:
+                    pheromone[i][j] = tau_min
+                elif pheromone[i][j] > tau_max:
+                    pheromone[i][j] = tau_max
+
+    def _deposit_rank_based_matrix(
+        self,
+        pheromone: list[list[float]],
+        tau_max: float,
+        ranked_results: list[tuple[float, list]],
+    ) -> None:
+
+        W = self.W_RANK
+        n_depositing = min(W, len(ranked_results))
+
+        for rank_idx in range(n_depositing):
+            cost, tour = ranked_results[rank_idx]
+            if cost <= 0 or cost == float("inf"):
+                continue
+            weight  = W - rank_idx      # terbaik: W, terakhir: 1
+            deposit = weight * self.Q / cost
+            for i in range(len(tour) - 1):
+                u, v = tour[i], tour[i + 1]
+                new_val = pheromone[u][v] + deposit
+                pheromone[u][v] = min(new_val, tau_max)
+
+    # ══════════════════════════════════════════════════════════════════
+    # LAYER 3: POST-PROCESSING — Or-opt pada tour waypoint
+    # ══════════════════════════════════════════════════════════════════
+
+    def _or_opt_tour(
+        self,
+        tour: list[int],
+        dist_matrix: list[list[float]]
+    ) -> list[int]:
+        best      = tour[:]
+        best_cost = self._tour_cost(best, dist_matrix)
+        n         = len(best)
+
+        for _ in range(self.OR_OPT_PASSES):
+            improved = False
+
+            for seg_len in range(1, 4):  # segmen 1, 2, 3 waypoint
+                if improved:
+                    break
+
+                for i in range(1, n - seg_len):
+                    seg         = best[i: i + seg_len]
+                    before_seg  = best[i - 1]
+                    after_seg   = best[i + seg_len] if (i + seg_len) < n else None
+
+                    if after_seg is None:
+                        continue
+
+                    # Biaya yang dihilangkan saat segmen dilepas
+                    cost_out = (
+                        dist_matrix[before_seg][seg[0]]
+                        + dist_matrix[seg[-1]][after_seg]
+                    )
+                    # Biaya bridge langsung before→after
+                    cost_bridge = dist_matrix[before_seg][after_seg]
+                    saving = cost_out - cost_bridge
+
+                    # Coba sisipkan di semua posisi j
+                    for j in range(1, n - seg_len + 1):
+                        if i <= j <= i + seg_len:
+                            continue
+
+                        insert_before = best[j - 1]
+                        insert_after  = best[j] if j < n else None
+                        if insert_after is None:
+                            continue
+
+                        cost_remove_j = dist_matrix[insert_before][insert_after]
+                        cost_insert_j = (
+                            dist_matrix[insert_before][seg[0]]
+                            + dist_matrix[seg[-1]][insert_after]
+                        )
+                        delta = saving - (cost_insert_j - cost_remove_j)
+
+                        if delta > 1e-9:
+                            # Lakukan relocate
+                            without_seg  = best[:i] + best[i + seg_len:]
+                            j_adj        = j if j < i else j - seg_len
+                            new_tour     = without_seg[:j_adj] + seg + without_seg[j_adj:]
+                            new_cost     = self._tour_cost(new_tour, dist_matrix)
+                            if new_cost < best_cost - 1e-9:
+                                best      = new_tour
+                                best_cost = new_cost
+                                improved  = True
+                                break
+
+                    if improved:
+                        break
+
+        return best
+
+    def _three_opt_tour(
+        self,
+        tour: list[int],
+        dist_matrix: list[list[float]]
+    ) -> list[int]:
+        if not self.USE_3OPT:
+            return tour
+
+        best      = tour[:]
+        best_cost = self._tour_cost(best, dist_matrix)
+        n         = len(best)
+        improved  = True
+
+        while improved:
+            improved = False
+            for i in range(n - 4):
+                for j in range(i + 2, n - 2):
+                    for k in range(j + 2, n):
+                        # 8 kemungkinan reconnection untuk 3-opt
+                        # Kita cek semua dan ambil yang terbaik
+                        a, b = best[i],   best[i + 1]
+                        c, d = best[j],   best[j + 1]
+                        e, f = best[k],   best[(k + 1) % n]
+
+                        d0 = (dist_matrix[a][b]
+                              + dist_matrix[c][d]
+                              + dist_matrix[e][f])
+
+                        # Coba semua reconnection yang menghasilkan valid tour
+                        # Reconnection 1: reverse segmen [i+1..j]
+                        d1 = (dist_matrix[a][c]
+                              + dist_matrix[b][d]
+                              + dist_matrix[e][f])
+                        # Reconnection 2: reverse segmen [j+1..k]
+                        d2 = (dist_matrix[a][b]
+                              + dist_matrix[c][e]
+                              + dist_matrix[d][f])
+                        # Reconnection 3: reverse keduanya
+                        d3 = (dist_matrix[a][d]
+                              + dist_matrix[e][b]
+                              + dist_matrix[c][f])
+                        # Reconnection 4: 3-opt move murni
+                        d4 = (dist_matrix[a][c]
+                              + dist_matrix[b][e]
+                              + dist_matrix[d][f])
+
+                        best_delta = min(d1, d2, d3, d4)
+                        if best_delta < d0 - 1e-9:
+                            delta = d0 - best_delta
+                            # Rekonstruksi tour berdasarkan reconnection terbaik
+                            if best_delta == d1:
+                                new_tour = (best[:i+1]
+                                            + best[i+1:j+1][::-1]
+                                            + best[j+1:])
+                            elif best_delta == d2:
+                                new_tour = (best[:j+1]
+                                            + best[j+1:k+1][::-1]
+                                            + best[k+1:])
+                            elif best_delta == d3:
+                                new_tour = (best[:i+1]
+                                            + best[j+1:k+1]
+                                            + best[i+1:j+1]
+                                            + best[k+1:])
+                            else:  # d4
+                                new_tour = (best[:i+1]
+                                            + best[j+1:k+1]
+                                            + best[i+1:j+1][::-1]
+                                            + best[k+1:])
+
+                            new_cost = self._tour_cost(new_tour, dist_matrix)
+                            if new_cost < best_cost - 1e-9:
+                                best      = new_tour
+                                best_cost = new_cost
+                                improved  = True
+
+        return best
+
+    def _lk_style_moves(
+        self,
+        tour: list[int],
+        dist_matrix: list[list[float]],
+        nn_cands: list[list[int]]
+    ) -> list[int]:
+
+        if not self.LK_MOVES:
+            return tour
+
+        best      = tour[:]
+        best_cost = self._tour_cost(best, dist_matrix)
+        n         = len(best)
+
+        # Buat position index: pos[waypoint_idx] = posisi di tour
+        pos = [0] * n
+        for idx, wp in enumerate(best):
+            pos[wp] = idx
+
+        improved = True
+        while improved:
+            improved = False
+            for idx in range(n):
+                t1 = best[idx]
+                t2 = best[(idx + 1) % n]
+
+                gain_t1t2 = dist_matrix[t1][t2]
+
+                # Cari t3 dari nearest neighbors t1
+                for t3 in nn_cands[t1]:
+                    if t3 == t2:
+                        continue
+
+                    gain_after_t3 = gain_t1t2 - dist_matrix[t1][t3]
+                    if gain_after_t3 <= 0:
+                        # Karena nn_cands sorted by dist, tidak perlu lanjut
+                        break
+
+                    # Cari t4: node setelah atau sebelum t3 di tour
+                    t3_pos = pos[t3]
+                    for t4 in [best[(t3_pos + 1) % n], best[(t3_pos - 1) % n]]:
+                        if t4 == t1:
+                            continue
+
+                        # Gain total jika swap edge (t1,t2) dan (t3,t4)
+                        # dengan (t1,t3) dan (t2,t4) — equivalen 2-opt move
+                        gain_total = gain_after_t3 + dist_matrix[t3][t4] - dist_matrix[t2][t4]
+
+                        if gain_total > 1e-9:
+                            # Lakukan 2-opt swap di tour
+                            i_pos = idx
+                            j_pos = t3_pos
+                            if i_pos > j_pos:
+                                i_pos, j_pos = j_pos, i_pos
+
+                            new_tour = best[:i_pos+1] + best[i_pos+1:j_pos+1][::-1] + best[j_pos+1:]
+                            new_cost = self._tour_cost(new_tour, dist_matrix)
+
+                            if new_cost < best_cost - 1e-9:
+                                best      = new_tour
+                                best_cost = new_cost
+                                # Update position index
+                                for k, wp in enumerate(best):
+                                    pos[wp] = k
+                                improved = True
+                                break
+
+                    if improved:
+                        break
+                if improved:
+                    break
+
+        return best
+
+    # ══════════════════════════════════════════════════════════════════
+    # MAIN: ACO-TSP LOOP
+    # ══════════════════════════════════════════════════════════════════
+
+    def find_tour(self, G, waypoints: list[int]) -> tuple[float, list[int]]:
+  
+        self._hav_cache     = {}
+        self._segment_cache = {}
+        rng = random.Random(self.RANDOM_SEED)
+        n   = len(waypoints)
+
+        if n == 0:
+            return 0.0, []
+        if n == 1:
+            return 0.0, [waypoints[0]]
+        if n == 2:
+            cost, path = self._bidirectional_dijkstra(G, waypoints[0], waypoints[1])
+            return cost, path
+
+        # ── Step 1: Pre-compute distance matrix (O(N² × BiDijkstra)) ──
+        dist_matrix, path_matrix = self._build_distance_matrix(G, waypoints)
+
+        # ── Step 2: Nearest-neighbor candidate lists ──────────────────
+        nn_cands = self._build_nn_candidates(dist_matrix, n)
+
+        # ── Step 3: Nearest-neighbor greedy tour sebagai initial best ─
+        # Greedy NN: mulai dari node 0, selalu kunjungi tetangga terdekat.
+        # Ini memberikan solusi awal yang cukup baik (~25% dari optimal)
+        # dan feromon awal yang bermakna.
+        def greedy_nn_tour(start: int) -> list[int]:
+            visited    = [False] * n
+            tour       = [start]
+            visited[start] = True
+            current = start
+            for _ in range(n - 1):
+                best_j    = -1
+                best_dist = float("inf")
+                for j in range(n):
+                    if not visited[j] and dist_matrix[current][j] < best_dist:
+                        best_dist = dist_matrix[current][j]
+                        best_j    = j
+                if best_j == -1:
+                    break
+                tour.append(best_j)
+                visited[best_j] = True
+                current = best_j
+            return tour
+
+        # Coba beberapa starting point untuk greedy NN, ambil yang terbaik
+        best_greedy_tour = min(
+            (greedy_nn_tour(s) for s in range(min(n, 5))),
+            key=lambda t: self._tour_cost(t, dist_matrix)
+        )
+        best_tour = best_greedy_tour
+        best_cost = self._tour_cost(best_tour, dist_matrix)
+
+        # ── Step 4: Inisialisasi MMAS + feromon ──────────────────────
+        tau_max, tau_min = self._compute_mmas_bounds(best_cost, n)
+
+        # Matrix pheromone NxN, diinisialisasi ke TAU_INIT
+        pheromone = [[self.TAU_INIT] * n for _ in range(n)]
+
+        # Warmup deposit di tour greedy terbaik
+        warmup_deposit = self.Q / best_cost if best_cost > 0 else 1.0
+        for i in range(len(best_tour) - 1):
+            u, v = best_tour[i], best_tour[i + 1]
+            pheromone[u][v] = min(self.TAU_INIT + warmup_deposit, tau_max)
+
+        # ── Step 5: Loop iterasi ACO-TSP ─────────────────────────────
+        for iteration in range(self.N_ITERATIONS):
+            iteration_results: list[tuple[float, list]] = []
+
+            # Setiap semut bangun complete tour
+            for ant_idx in range(self.N_ANTS):
+                # Variasikan starting point antar semut untuk diversitas
+                start = ant_idx % n
+                tour = self._build_ant_tour(
+                    n, start, pheromone, dist_matrix, nn_cands, tau_min, rng
+                )
+                if tour is None or len(tour) < n:
+                    continue
+                cost = self._tour_cost(tour, dist_matrix)
+                if cost < float("inf"):
+                    iteration_results.append((cost, tour))
+
+            # Sort ascending (terbaik pertama)
+            iteration_results.sort(key=lambda x: x[0])
+
+            # Update global best
+            if iteration_results:
+                iter_best_cost, iter_best_tour = iteration_results[0]
+                if iter_best_cost < best_cost:
+                    best_cost = iter_best_cost
+                    best_tour = iter_best_tour[:]
+
+            # Update MMAS bounds dari best_cost terkini
+            tau_max, tau_min = self._compute_mmas_bounds(best_cost, n)
+
+            # Evaporasi + clamp
+            self._evaporate_matrix(pheromone, tau_min, tau_max, n)
+
+            # Rank-based deposit
+            self._deposit_rank_based_matrix(pheromone, tau_max, iteration_results)
+
+        # ── Step 6: Post-processing berlapis ─────────────────────────
+        # Or-opt dulu (cepat, menghilangkan detour kecil)
+        best_tour = self._or_opt_tour(best_tour, dist_matrix)
+        best_cost = self._tour_cost(best_tour, dist_matrix)
+
+        # 3-opt (lebih kuat, lolos dari local optimum 2-opt/Or-opt)
+        best_tour = self._three_opt_tour(best_tour, dist_matrix)
+        best_cost = self._tour_cost(best_tour, dist_matrix)
+
+        # Lin-Kernighan style moves (final polish)
+        best_tour = self._lk_style_moves(best_tour, dist_matrix, nn_cands)
+        best_cost = self._tour_cost(best_tour, dist_matrix)
+
+        # ── Step 7: Rekonstruksi full path OSM ───────────────────────
+        # Gabungkan semua segment path menjadi satu list OSM node
+        full_path: list[int] = []
+        for i in range(len(best_tour) - 1):
+            wp_from = best_tour[i]
+            wp_to   = best_tour[i + 1]
+            segment = path_matrix[wp_from][wp_to]
+            if not segment:
+                continue
+            if full_path and full_path[-1] == segment[0]:
+                full_path.extend(segment[1:])
+            else:
+                full_path.extend(segment)
+
+        return best_cost, full_path
+
+    # ══════════════════════════════════════════════════════════════════
+    # MULTI-STOP TSP ENTRY POINT — dipanggil otomatis oleh benchmark
+    # ══════════════════════════════════════════════════════════════════
+
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
+        """
+        Optimasi urutan multi-stop menggunakan ACO-TSP.
+
+        - Start dan end fixed (tidak dioptimalkan).
+        - Hanya intermediate stops yang di-reorder.
+        - Round-trip: tour kembali ke start.
+        - Menggunakan distance matrix + pheromone matrix NxN.
+        """
+        t0 = time.perf_counter()
+
+        # ── 1. Split nodes: start, middle (to optimize), end ──────────
+        start, middle, end = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        if not middle:
+            # Jika hanya 1-2 stops, langsung shortest path tanpa TSP
+            if round_trip and len(nodes) == 1:
+                # Round-trip single node: cost 0, empty tour
+                return _multi_stop_result(
+                    self, G, scenario_name, [start], 0.0,
+                    "round_trip_single", 0.0, "travel_time"
+                )
+            elif len(nodes) <= 2:
+                # Direct path
+                order = [start] + middle + ([end] if end != start else [])
+                return _multi_stop_result(
+                    self, G, scenario_name, order,
+                    (time.perf_counter() - t0) * 1000,
+                    "direct_path", 0.0, "travel_time"
+                )
+
+        # ── 2. Pre-compute pairwise costs antar semua stops ──────────
+        all_stops = [start] + list(middle) + ([end] if end != start else [])
+        pair_cost = _pairwise_stop_costs(G, all_stops, "travel_time")
+
+        # ── 3. Jalankan ACO-TSP untuk optimasi urutan middle stops ───
+        # Map stops ke indices untuk matrix
+        stop_to_idx = {stop: i for i, stop in enumerate(all_stops)}
+        waypoints = [stop_to_idx[s] for s in all_stops]
+
+        # Jalankan ACO-TSP (reuse find_tour logic)
+        tour_cost, tour_indices = self.find_tour(G, waypoints)
+
+        # Map kembali ke node IDs
+        optimized_order = [all_stops[i] for i in tour_indices]
+
+        # Pastikan start dan end sesuai kontrak
+        if optimized_order[0] != start:
+            # Jika ACO mengubah start, koreksi
+            optimized_order = [start] + [s for s in optimized_order if s != start and s != end] + ([end] if end != start else [])
+        if end and optimized_order[-1] != end:
+            optimized_order[-1] = end
+
+        # ── 4. Hitung objective score (total travel_time) ─────────────
+        order_score = _tour_cost(optimized_order, pair_cost)
+
+        # ── 5. Return RouteResult ─────────────────────────────────────
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        return _multi_stop_result(
+            self, G, scenario_name, optimized_order, elapsed_ms,
+            "aco_tsp_optimized", order_score, "travel_time",
+            metadata={
+                "aco_params": {
+                    "n_ants": self.N_ANTS,
+                    "n_iterations": self.N_ITERATIONS,
+                    "alpha": self.ALPHA,
+                    "beta": self.BETA,
+                    "rho": self.RHO,
+                    "w_rank": self.W_RANK,
+                    "nn_candidates": self.NN_CANDIDATES,
+                },
+                "post_processing": "Or-opt + 3-opt + Lin-Kernighan",
+                "segment_routing": "Bidirectional Dijkstra",
+            }
+        )
+
+    # ══════════════════════════════════════════════════════════════════
+    # INTERFACE WAJIB — find_route untuk single-pair (framework standar)
+    # ══════════════════════════════════════════════════════════════════
+
+    def find_route(self, G, source_node, target_node, scenario_name=""):
+
+        self._hav_cache     = {}
+        self._segment_cache = {}
+
+        t0 = time.perf_counter()
+        try:
+            cost, route = self._bidirectional_dijkstra(G, source_node, target_node)
+            if not route or cost == float("inf"):
+                raise nx.NetworkXNoPath(
+                    f"ACO-VRP: tidak ada jalur dari {source_node} ke {target_node}"
+                )
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name,
+                source_node, target_node, str(e), ms
+            )
+
+        ms = (time.perf_counter() - t0) * 1000
+        return RouteResult.build(
+            G, self.name, scenario_name,
+            source_node, target_node, route, ms,
+            metadata={
+                "mode":             "single-pair BiDijkstra",
+                "n_ants":           self.N_ANTS,
+                "n_iterations":     self.N_ITERATIONS,
+                "alpha":            self.ALPHA,
+                "beta":             self.BETA,
+                "rho":              self.RHO,
+                "w_rank":           self.W_RANK,
+                "nn_candidates":    self.NN_CANDIDATES,
+                "pheromone_scheme": "MMAS (Min-Max Ant System)",
+                "deposit_scheme":   f"rank-based top-{self.W_RANK}",
+                "post_processing":  "Or-opt + 3-opt + Lin-Kernighan moves",
+                "segment_routing":  "Bidirectional Dijkstra with cache",
+                "note": (
+                    "Untuk multi-point tour optimization, "
+                    "panggil find_tour(G, waypoints) langsung."
+                ),
+            }
+        )
+
 # ══════════════════════════════════════════════════════════════════
 # SECTION 4: ANT COLONY OPTIMIZATION (ACO)
 # Mimics how real ant colonies find shortest paths via pheromone trails.
@@ -973,17 +1819,7 @@ class BurhanGA(BaseRoutingAlgorithm):
 # ══════════════════════════════════════════════════════════════════
 
 class AntColonyRouting(BaseRoutingAlgorithm):
-    """
-    Ant Colony Optimization (ACO) for point-to-point routing.
 
-    Each ant builds a path by choosing the next node probabilistically,
-    weighted by pheromone (learned from past good solutions) and
-    visibility (inverse of travel_time — prefers fast edges).
-
-    After all ants complete their paths in an iteration, pheromone evaporates
-    globally and the best-performing ant deposits fresh pheromone along its
-    route. This reinforces good paths over time.
-    """
     name        = "aco_routing"
     description = "Ant Colony Optimization — pheromone × visibility (travel_time)"
 

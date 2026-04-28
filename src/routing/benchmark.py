@@ -882,7 +882,6 @@ def run_platform(cfg):
         GeneticAlgorithm,
         GeraldSimulatedAnnealing,
         ParticleSwarmRouting,
-        AntColonyElite,
         AntColonyElitePro,
     )
     from src.routing.visualize import ResultVisualiser
@@ -920,7 +919,8 @@ def run_platform(cfg):
     registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
     # registry.register(AntColonyRouting())         # pheromone-based path search
     # registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
-    registry.register(AntColonyElitePro())         
+    registry.register(AntColonyElitePro())     
+    # registry.register(AntColonyPrime())       # improved ACO with elite ants    
     registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
     registry.register(ParticleSwarmRouting())     # swarm path optimisation
     # registry.register(DijkstraTime())      # baseline: rute tercepat

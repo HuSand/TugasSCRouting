@@ -916,7 +916,7 @@ def run_platform(cfg):
     # ACO, SA, and PSO route leg-by-leg using the benchmark's leg decomposition.
     registry = AlgorithmRegistry()
     registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
-    registry.register(AntColonyRouting())         # pheromone-based path search
+    # registry.register(AntColonyRouting())         # pheromone-based path search
     # registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
     registry.register(AntColonyElitePro())         
     registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA

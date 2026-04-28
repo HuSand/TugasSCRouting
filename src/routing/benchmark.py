@@ -198,33 +198,60 @@ class BenchmarkRunner:
     @staticmethod
     def _best_visit_order(G: nx.MultiDiGraph,
                           algo: BaseRoutingAlgorithm,
-                          nodes: list) -> tuple:
+                          nodes: list,
+                          round_trip: bool = False) -> tuple:
         weight = BenchmarkRunner._order_weight(algo)
         if len(nodes) <= 2:
             return nodes, weight, 0.0
 
         pair_cost = {}
         for src in nodes:
+            try:
+                lengths = nx.single_source_dijkstra_path_length(
+                    G, src, weight=weight
+                )
+            except (nx.NetworkXNoPath, nx.NodeNotFound, nx.NetworkXError):
+                lengths = {}
             for dst in nodes:
-                if src == dst:
-                    continue
-                try:
-                    pair_cost[(src, dst)] = nx.shortest_path_length(
-                        G, src, dst, weight=weight
-                    )
-                except (nx.NetworkXNoPath, nx.NodeNotFound):
-                    pair_cost[(src, dst)] = float("inf")
+                if src != dst:
+                    pair_cost[(src, dst)] = lengths.get(dst, float("inf"))
 
-        best_order = None
-        best_cost = float("inf")
-        for order in permutations(nodes):
-            cost = sum(pair_cost[(src, dst)]
+        def route_cost(order: list) -> float:
+            cost = sum(pair_cost.get((src, dst), float("inf"))
                        for src, dst in zip(order[:-1], order[1:]))
-            if cost < best_cost:
-                best_order = list(order)
-                best_cost = cost
+            if round_trip and len(order) > 1:
+                cost += pair_cost.get((order[-1], order[0]), float("inf"))
+            return cost
 
-        return best_order or nodes, weight, best_cost
+        # Exhaustive search is exact but factorial. Keep it only for small
+        # route lists; large scenarios use greedy next-stop selection.
+        if len(nodes) <= 9:
+            start = nodes[0]
+            best_order = None
+            best_cost = float("inf")
+            for tail in permutations(nodes[1:]):
+                order = [start] + list(tail)
+                cost = route_cost(order)
+                if cost < best_cost:
+                    best_order = order
+                    best_cost = cost
+            return best_order or nodes, f"{weight}_exact_order", best_cost
+
+        remaining = set(nodes[1:])
+        order = [nodes[0]]
+        while remaining:
+            cur = order[-1]
+            nxt = min(
+                remaining,
+                key=lambda n: pair_cost.get((cur, n), float("inf"))
+            )
+            order.append(nxt)
+            remaining.remove(nxt)
+
+        best_order = order
+        best_cost = route_cost(best_order)
+
+        return best_order or nodes, f"{weight}_greedy_next_stop", best_cost
 
     @staticmethod
     def _run_algorithm_on_scenario(algo: BaseRoutingAlgorithm,
@@ -254,7 +281,7 @@ class BenchmarkRunner:
         order_score = None
         if scenario.optimize_order:
             ordered_nodes, order_objective, order_score = BenchmarkRunner._best_visit_order(
-                G, algo, nodes
+                G, algo, nodes, scenario.round_trip
             )
             idx_by_node = {node: i for i, node in enumerate(nodes)}
             order_idx = [idx_by_node[n] for n in ordered_nodes]
@@ -401,12 +428,14 @@ class BenchmarkRunner:
         flat_tasks = []
 
         for algo in algos:
-            # Algorithms with _route_multi_stop handle the full tour themselves —
-            # skip leg decomposition and run them in the main process instead
-
             nodes  = list(scenario.node_sequence)
             labels = list(scenario.label_sequence)
             coords = list(scenario.coord_sequence)
+
+            # Algorithms with _route_multi_stop handle the full tour themselves.
+            if scenario.is_multi_stop and hasattr(algo, "_route_multi_stop"):
+                algo_meta[algo.name] = {"mode": "route_multi_stop"}
+                continue
 
             if len(nodes) <= 2 and not scenario.round_trip:
                 algo_meta[algo.name] = {"mode": "simple"}
@@ -416,7 +445,7 @@ class BenchmarkRunner:
             order_score     = None
             if scenario.optimize_order:
                 ordered, order_objective, order_score = BenchmarkRunner._best_visit_order(
-                    G, algo, nodes
+                    G, algo, nodes, scenario.round_trip
                 )
                 idx_by_node = {n: i for i, n in enumerate(nodes)}
                 order_idx   = [idx_by_node[n] for n in ordered]
@@ -470,6 +499,16 @@ class BenchmarkRunner:
         # ── 3. Handle special-case algos in main process ──────────────────
         for algo in algos:
             meta = algo_meta.get(algo.name, {"mode": "simple"})
+
+            if meta["mode"] == "route_multi_stop":
+                results_by_name[algo.name] = algo._route_multi_stop(
+                    G,
+                    list(scenario.node_sequence),
+                    scenario.name,
+                    source_node=scenario.source_node,
+                    target_node=scenario.target_node,
+                )
+                continue
 
             if meta["mode"] == "simple":
                 results_by_name[algo.name] = algo.safe_run(
@@ -772,6 +811,7 @@ def build_category_scenarios(
             route_nodes=nodes,
             route_labels=labels,
             route_coords=coords,
+            optimize_order=True,
             round_trip=True,
         )
 

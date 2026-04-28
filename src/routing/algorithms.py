@@ -1692,6 +1692,83 @@ class AntColonyElite(BaseRoutingAlgorithm):
  
         return best_path
  
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
+        """Choose visit order with ACO-Elite stop-level pheromone search."""
+        t0 = time.perf_counter()
+        start, end, middle = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        if start is None or (not middle and start == end):
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name, start or -1, end or -1,
+                "Need at least 2 stops for multi-stop routing", ms
+            )
+ 
+        stops = _unique_preserve_order([start] + middle + [end])
+        pair_cost = _pairwise_stop_costs(G, stops, "travel_time")
+        rng = random.Random(self.RANDOM_SEED)
+        pheromone = {}
+        best_order = [start] + middle + [end]
+        best_cost = _tour_cost(best_order, pair_cost)
+ 
+        for _ in range(self.N_ITERATIONS):
+            iteration_best = None
+            iteration_cost = float("inf")
+ 
+            for _ in range(self.N_ANTS):
+                remaining = middle[:]
+                current = start
+                order = [start]
+ 
+                while remaining:
+                    weights = []
+                    for candidate in remaining:
+                        tau = pheromone.get((current, candidate), self.TAU_INIT)
+                        cost = pair_cost.get((current, candidate), float("inf"))
+                        eta = 1.0 / cost if cost > 0 and math.isfinite(cost) else 0.0
+                        weights.append((tau ** self.ALPHA) * (eta ** self.BETA))
+                    chosen = _weighted_choice(remaining, weights, rng)
+                    order.append(chosen)
+                    remaining.remove(chosen)
+                    current = chosen
+ 
+                order.append(end)
+                cost = _tour_cost(order, pair_cost)
+                if cost < iteration_cost:
+                    iteration_best = order
+                    iteration_cost = cost
+ 
+            for key in list(pheromone.keys()):
+                pheromone[key] *= (1.0 - self.RHO)
+                if pheromone[key] < 1e-6:
+                    del pheromone[key]
+ 
+            if iteration_best is not None and iteration_cost < float("inf"):
+                deposit = self.Q / iteration_cost if iteration_cost > 0 else 0.0
+                for src, dst in zip(iteration_best[:-1], iteration_best[1:]):
+                    pheromone[(src, dst)] = pheromone.get((src, dst), self.TAU_INIT) + deposit
+                if iteration_cost < best_cost:
+                    best_order = iteration_best
+                    best_cost = iteration_cost
+ 
+        ms = (time.perf_counter() - t0) * 1000
+        return _multi_stop_result(
+            self, G, scenario_name, best_order, ms,
+            "aco_elite_stop_order", best_cost, "travel_time",
+            {
+                "n_ants": self.N_ANTS,
+                "n_iterations": self.N_ITERATIONS,
+                "alpha": self.ALPHA,
+                "beta": self.BETA,
+                "rho": self.RHO,
+                "q": self.Q,
+            },
+        )
+ 
     # ------------------------------------------------------------------
     # INTERFACE WAJIB — dipanggil oleh framework benchmark
     # ------------------------------------------------------------------
@@ -2222,6 +2299,87 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
             best_path = optimized_path
 
         return best_path
+
+    def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
+                          source_node: int = None,
+                          target_node: int = None,
+                          round_trip: bool = False) -> RouteResult:
+        """Choose visit order with ACO-Elite Pro on stop permutations."""
+        t0 = time.perf_counter()
+        start, end, middle = _split_multi_stop_nodes(
+            nodes, source_node, target_node, round_trip
+        )
+        if start is None or (not middle and start == end):
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name, start or -1, end or -1,
+                "Need at least 2 stops for multi-stop routing", ms
+            )
+
+        stops = _unique_preserve_order([start] + middle + [end])
+        pair_cost = _pairwise_stop_costs(G, stops, "travel_time")
+        rng = random.Random(self.RANDOM_SEED)
+
+        best_order = [start] + middle + [end]
+        best_cost = _tour_cost(best_order, pair_cost)
+        pheromone = {}
+
+        for _ in range(self.N_ITERATIONS):
+            iteration_best = None
+            iteration_cost = float("inf")
+
+            for _ in range(self.N_ANTS):
+                remaining = middle[:]
+                current = start
+                order = [start]
+
+                while remaining:
+                    weights = []
+                    for candidate in remaining:
+                        tau = pheromone.get((current, candidate), self.TAU_INIT)
+                        cost = pair_cost.get((current, candidate), float("inf"))
+                        eta = 1.0 / cost if cost > 0 and math.isfinite(cost) else 0.0
+                        weights.append((tau ** self.ALPHA) * (eta ** self.BETA))
+
+                    chosen = _weighted_choice(remaining, weights, rng)
+                    order.append(chosen)
+                    remaining.remove(chosen)
+                    current = chosen
+
+                order.append(end)
+                cost = _tour_cost(order, pair_cost)
+                if cost < iteration_cost:
+                    iteration_best = order
+                    iteration_cost = cost
+
+            for key in list(pheromone.keys()):
+                pheromone[key] *= (1.0 - self.RHO)
+                if pheromone[key] < 1e-6:
+                    del pheromone[key]
+
+            if iteration_best is not None and iteration_cost < float("inf"):
+                deposit = self.Q / iteration_cost if iteration_cost > 0 else 0.0
+                for u, v in zip(iteration_best[:-1], iteration_best[1:]):
+                    pheromone[(u, v)] = pheromone.get((u, v), self.TAU_INIT) + deposit
+
+                if iteration_cost < best_cost:
+                    best_order = iteration_best[:]
+                    best_cost = iteration_cost
+
+        ms = (time.perf_counter() - t0) * 1000
+        return _multi_stop_result(
+            self, G, scenario_name, best_order, ms,
+            "aco_elite_pro_stop_order", best_cost, "travel_time",
+            {
+                "n_ants": self.N_ANTS,
+                "n_iterations": self.N_ITERATIONS,
+                "alpha": self.ALPHA,
+                "beta": self.BETA,
+                "rho": self.RHO,
+                "q": self.Q,
+                "w_rank": self.W_RANK,
+            },
+        )
 
     # ══════════════════════════════════════════════════════════════════
     # INTERFACE WAJIB — dipanggil oleh framework benchmark

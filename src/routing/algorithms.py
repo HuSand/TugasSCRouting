@@ -366,9 +366,9 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
     # Separate from point-to-point because TSP search space is smaller
     # (permutations of ~50 stops vs. road paths with thousands of nodes),
     # so fewer individuals and generations are needed to converge.
-    TSP_POPULATION_SIZE = 40    # individuals per generation
-    TSP_GENERATIONS     = 80    # max generations before forced stop
-    TSP_PATIENCE        = 15    # stop early if no improvement for this many gens
+    TSP_POPULATION_SIZE = 60    # individuals per generation
+    TSP_GENERATIONS     = 100   # max generations before forced stop
+    TSP_PATIENCE        = 20    # stop early if no improvement for this many gens
     TSP_WORKERS         = 4     # parallel threads for pairwise precomputation
 
     # ─────────────────────────────────────────────────────────────────────
@@ -789,7 +789,7 @@ class BurhanGA(BaseRoutingAlgorithm):
 
 
 # ══════════════════════════════════════════════════════════════════
-# SECTION 4: ANT COLONY OPTIMIZATION (ACO) — renumbered after Christofides removal
+# SECTION 4: ANT COLONY OPTIMIZATION (ACO)
 
 # ══════════════════════════════════════════════════════════════════
 # SECTION 5: ANT COLONY OPTIMIZATION (ACO)

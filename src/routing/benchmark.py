@@ -880,9 +880,9 @@ def build_category_scenarios(
 def run_platform(cfg):
     from src.routing.algorithms import (
         GeneticAlgorithm,
-        AntColonyRouting,
         GeraldSimulatedAnnealing,
         ParticleSwarmRouting,
+        AntColonyElitePro,
     )
     from src.routing.visualize import ResultVisualiser
 
@@ -916,8 +916,26 @@ def run_platform(cfg):
     # Every model implements _route_multi_stop for category scenarios:
     # start/end are fixed, while each model chooses its own intermediate order.
     registry = AlgorithmRegistry()
+    registry.register(GeneticAlgorithm())         # TSP-GA: evolves visit order
+    # registry.register(AntColonyRouting())         # pheromone-based path search
+    # registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
+    registry.register(AntColonyElitePro())     
+    # registry.register(AntColonyPrime())       # improved ACO with elite ants    
+    registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
+    registry.register(ParticleSwarmRouting())     # swarm path optimisation
+    # registry.register(DijkstraTime())      # baseline: rute tercepat
+    # registry.register(DijkstraDistance()) # baseline: rute terpendek
+    # registry.register(AStarTime())        # baseline: A* tercepat
+    # registry.register(AStarDistance())    # baseline: A* terpendek
+    # registry.register(ChristofidesAlgorithm())  # Christofides approximation
+    # registry.register(SandyGA())          # Sandy
+    # registry.register(BurhanGA())         # Burhan
+    # registry.register(BimoGA())           # Bimo
+    # registry.register(GeraldGA())         # Gerald
+    registry.register(GeraldSimulatedAnnealing())  # Gerald SA shortest path
+    # registry.register(AntColonyRouting())
+    # registry.register(AntColonyElite())
     registry.register(GeneticAlgorithm())         # TSP-GA visit-order evolution
-    registry.register(AntColonyRouting())         # pheromone stop-order search
     registry.register(GeraldSimulatedAnnealing()) # distance-based stop-order SA
     registry.register(ParticleSwarmRouting())     # swarm stop-order optimisation
     registry.summary()

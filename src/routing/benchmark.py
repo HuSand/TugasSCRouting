@@ -878,8 +878,6 @@ def build_category_scenarios(
 def run_platform(cfg):
     from src.routing.algorithms import (
         GeneticAlgorithm,
-        AntColonyRouting,
-        ChristofidesAlgorithm,
         GeraldSimulatedAnnealing,
         ParticleSwarmRouting,
         AntColonyElite,

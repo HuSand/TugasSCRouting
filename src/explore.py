@@ -77,7 +77,7 @@ def _quality_check(fac: gpd.GeoDataFrame) -> list:
     if "nearest_node" in fac.columns:
         dupes = fac["nearest_node"].duplicated().sum()
         if dupes > len(fac) * 0.3:
-            issues.append("High road-node sharing — many facilities near same intersection")
+            issues.append("High road-node sharing - many facilities near same intersection")
 
     # Unnamed
     unnamed = fac["name"].isna().sum()
@@ -97,7 +97,7 @@ def _distributions(fac: gpd.GeoDataFrame):
     log.info("Category distribution:")
     for cat, count in fac["category"].value_counts().items():
         pct = count / len(fac) * 100
-        bar = "█" * int(pct / 2)
+        bar = "#" * int(pct / 2)
         log.info(f"  {cat:<15} {count:5d} ({pct:4.1f}%) {bar}")
 
 
@@ -185,7 +185,7 @@ def _interactive_map(fac: gpd.GeoDataFrame, data_dir: Path):
 def _write_report(fac, issues, data_dir):
     from datetime import datetime
     out = data_dir / "exploration_report.txt"
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:
         f.write(f"Exploration Report\nGenerated: {datetime.now().isoformat()}\n{'='*50}\n\n")
         f.write(f"Total facilities: {len(fac)}\n\n")
         f.write("CATEGORY BREAKDOWN\n")

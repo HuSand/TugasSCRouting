@@ -451,6 +451,52 @@ def _multi_stop_result(algo,
     )
 
 
+class _StopOrderFrameRecorder:
+    """
+    Per-iteration history recorder for stop-order algorithms.
+
+    The evolution viewer needs a road-level path for each generation in
+    order to animate the line and show real km/min stats. Re-expanding
+    the tour every iteration is expensive (one Dijkstra per leg), so we
+    cache the expansion and only redo it when the stop order actually
+    changes — which is rare in practice (most iterations don't improve
+    the best order).
+    """
+    def __init__(self, G, weight: str):
+        self.G       = G
+        self.weight  = weight
+        self._key    = None
+        self._cached = None
+
+    def frame(self, gen_idx: int, order: list) -> dict:
+        key = tuple(order)
+        if key != self._key:
+            try:
+                path = _expand_stop_tour(self.G, order, self.weight)
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                path = []
+            if path:
+                self._cached = {
+                    "min":     round(_ga_path_cost(self.G, path) / 60, 3),
+                    "dist":    round(_ga_path_distance(self.G, path) / 1000, 3),
+                    "coords":  [
+                        [round(float(self.G.nodes[n]["y"]), 5),
+                         round(float(self.G.nodes[n]["x"]), 5)]
+                        for n in path if self.G.nodes.get(n)
+                    ],
+                    "streets": _route_streets(self.G, path),
+                }
+            else:
+                self._cached = {
+                    "min":     float("inf"),
+                    "dist":    0.0,
+                    "coords":  [],
+                    "streets": [],
+                }
+            self._key = key
+        return {"gen": gen_idx + 1, **self._cached}
+
+
 # ══════════════════════════════════════════════════════════════════
 # SECTION 3: GENETIC ALGORITHM
 #
@@ -498,8 +544,8 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
     # Separate from point-to-point because TSP search space is smaller
     # (permutations of ~50 stops vs. road paths with thousands of nodes),
     # so fewer individuals and generations are needed to converge.
-    TSP_POPULATION_SIZE = 60    # individuals per generation
-    TSP_GENERATIONS     = 100   # max generations before forced stop
+    TSP_POPULATION_SIZE = 20    # individuals per generation
+    TSP_GENERATIONS     = 30   # max generations before forced stop
     TSP_PATIENCE        = 20    # stop early if no improvement for this many gens
     TSP_WORKERS         = 4     # parallel threads for pairwise precomputation
 
@@ -702,6 +748,7 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
         best_cost     = tour_cost(best_perm)
         gen_history   = []
         no_improve    = 0   # consecutive generations without improvement
+        recorder      = _StopOrderFrameRecorder(G, "travel_time")
 
         for gen_idx in range(self.TSP_GENERATIONS):
             fitness  = [tour_cost(p) for p in population]
@@ -715,11 +762,8 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
             else:
                 no_improve += 1
 
-            gen_history.append({
-                "gen":  gen_idx + 1,
-                "min":  round(best_cost / 60, 3),
-                "dist": 0.0,    # filled after final expansion
-            })
+            full_order = [start] + best_perm + [end]
+            gen_history.append(recorder.frame(gen_idx, full_order))
 
             # Log progress every 10 generations so user can see it's running
             if (gen_idx + 1) % 10 == 0:
@@ -766,20 +810,6 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
             else:
                 # Skip the first node of each leg to avoid duplicating junctions
                 full_route.extend(leg[1:])
-
-        # Backfill the final gen_history entry with actual road-level data
-        # now that we have the real expanded path.
-        final_dist_km = round(_ga_path_distance(G, full_route) / 1000, 3)
-        final_coords  = []
-        for n in full_route:
-            nd = G.nodes.get(n)
-            if nd:
-                final_coords.append([round(float(nd["y"]), 5),
-                                      round(float(nd["x"]), 5)])
-        if gen_history:
-            gen_history[-1]["dist"]    = final_dist_km
-            gen_history[-1]["coords"]  = final_coords
-            gen_history[-1]["streets"] = _route_streets(G, full_route)
 
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(
@@ -930,10 +960,6 @@ class BurhanGA(BaseRoutingAlgorithm):
 
 # ══════════════════════════════════════════════════════════════════
 # SECTION 4: ANT COLONY OPTIMIZATION (ACO)
-
-# ══════════════════════════════════════════════════════════════════
-# SECTION 5: ANT COLONY OPTIMIZATION (ACO)
-#
 # Mimics how real ant colonies find shortest paths via pheromone trails.
 # Ants probabilistically choose edges based on pheromone strength (τ)
 # and visibility (η = 1/travel_time). Over iterations, shorter paths
@@ -1154,8 +1180,10 @@ class AntColonyRouting(BaseRoutingAlgorithm):
         pheromone = {}
         best_order = [start] + middle + [end]
         best_cost = _tour_cost(best_order, pair_cost)
+        recorder = _StopOrderFrameRecorder(G, "travel_time")
+        gen_history = []
 
-        for _ in range(self.N_ITERATIONS):
+        for gen_idx in range(self.N_ITERATIONS):
             iteration_best = None
             iteration_cost = float("inf")
             for _ in range(self.N_ANTS):
@@ -1195,6 +1223,8 @@ class AntColonyRouting(BaseRoutingAlgorithm):
                     best_order = iteration_best
                     best_cost = iteration_cost
 
+            gen_history.append(recorder.frame(gen_idx, best_order))
+
         ms = (time.perf_counter() - t0) * 1000
         return _multi_stop_result(
             self, G, scenario_name, best_order, ms,
@@ -1205,6 +1235,9 @@ class AntColonyRouting(BaseRoutingAlgorithm):
                 "alpha": self.ALPHA,
                 "beta": self.BETA,
                 "rho": self.RHO,
+                "generations": self.N_ITERATIONS,
+                "population": self.N_ANTS,
+                "gen_history": gen_history,
             },
         )
 
@@ -2511,8 +2544,10 @@ class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
         best_order = current_order[:]
         best_score = current_score
         temperature = self.INITIAL_TEMPERATURE
+        recorder = _StopOrderFrameRecorder(G, "length")
+        gen_history = []
 
-        for _ in range(self.ITERATIONS):
+        for gen_idx in range(self.ITERATIONS):
             candidate_middle = current_middle[:]
             if len(candidate_middle) >= 2:
                 if rng.random() < 0.5:
@@ -2545,6 +2580,8 @@ class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
             temperature = max(self.MIN_TEMPERATURE,
                               temperature * self.COOLING_RATE)
 
+            gen_history.append(recorder.frame(gen_idx, best_order))
+
         ms = (time.perf_counter() - t0) * 1000
         return _multi_stop_result(
             self, G, scenario_name, best_order, ms,
@@ -2556,6 +2593,7 @@ class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
                 "initial_temperature": self.INITIAL_TEMPERATURE,
                 "cooling_rate": self.COOLING_RATE,
                 "min_temperature": self.MIN_TEMPERATURE,
+                "gen_history": gen_history,
             },
         )
 
@@ -2834,6 +2872,8 @@ class ParticleSwarmRouting(BaseRoutingAlgorithm):
         best_idx = min(range(len(personal_bests)), key=lambda i: personal_scores[i])
         global_best = personal_bests[best_idx][:]
         global_score = personal_scores[best_idx]
+        recorder = _StopOrderFrameRecorder(G, "travel_time")
+        gen_history = []
 
         def move_toward(current: list, target: list, probability: float) -> list:
             moved = current[:]
@@ -2846,7 +2886,7 @@ class ParticleSwarmRouting(BaseRoutingAlgorithm):
                 moved[idx], moved[swap_idx] = moved[swap_idx], moved[idx]
             return moved
 
-        for _ in range(self.N_ITERATIONS):
+        for gen_idx in range(self.N_ITERATIONS):
             for idx, particle in enumerate(particles):
                 updated = particle[:]
 
@@ -2876,6 +2916,10 @@ class ParticleSwarmRouting(BaseRoutingAlgorithm):
                         global_best = updated[:]
                         global_score = updated_score
 
+            gen_history.append(
+                recorder.frame(gen_idx, order_from_middle(global_best))
+            )
+
         best_order = order_from_middle(global_best)
         ms = (time.perf_counter() - t0) * 1000
         return _multi_stop_result(
@@ -2888,6 +2932,9 @@ class ParticleSwarmRouting(BaseRoutingAlgorithm):
                 "cognitive_weight": self.COGNITIVE_WEIGHT,
                 "social_weight": self.SOCIAL_WEIGHT,
                 "mutation_rate": self.MUTATION_RATE,
+                "generations": self.N_ITERATIONS,
+                "population": self.N_PARTICLES,
+                "gen_history": gen_history,
             },
         )
 

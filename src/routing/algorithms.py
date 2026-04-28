@@ -106,7 +106,7 @@ def _ga_path_distance(G, path: list) -> float:
         data = G.get_edge_data(u, v)
         if data is None:
             return float("inf")
-        best = min(data.values(), key=lambda d: float(d.get("travel_time", 9999)))
+        best = min(data.values(), key=lambda d: float(d.get("length", 999999)))
         total += float(best.get("length", 0))
     return total
 
@@ -280,8 +280,8 @@ def _ga_run(algo, G, source_node, target_node, scenario_name):
 
 def _sa_noisy_shortest_path(G, source: int, target: int,
                             rng: random.Random,
-                            noise_min: float = 0.85,
-                            noise_max: float = 1.35):
+                            noise_min: float = 0.9,
+                            noise_max: float = 1.25):
     """
     Generate a candidate SA path using Dijkstra with noise on edge lengths
     (not travel_time). The physical-distance objective matches SA's fitness.
@@ -309,10 +309,10 @@ def _sa_neighbor_path(G, path: list, rng: random.Random) -> list:
         return path[:]
 
     i = rng.randint(0, len(path) - 2)
-    max_span = max(2, len(path) // 3)
+    max_span = min(max(2, len(path) // 4), 15)
     j = rng.randint(i + 1, min(i + max_span, len(path) - 1))
     segment = _sa_noisy_shortest_path(
-        G, path[i], path[j], rng, noise_min=0.75, noise_max=1.45
+        G, path[i], path[j], rng, noise_min=0.9, noise_max=1.25
     )
     if not segment:
         return path[:]
@@ -2446,10 +2446,10 @@ class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
     description = "Simulated Annealing — minimise physical distance"
 
     # ── SA parameters ─────────────────────────────────────────────────────
-    ITERATIONS          = 100     # total neighbour proposals
+    ITERATIONS          = 1600    # total neighbour proposals
     INITIAL_TEMPERATURE = 1200.0  # high T → accept bad moves freely (exploration)
-    COOLING_RATE        = 0.94    # multiply T by this each iteration (slow cool)
-    MIN_TEMPERATURE     = 0.01    # stop accepting bad moves below this threshold
+    COOLING_RATE        = 0.993   # slower cooling for a longer search
+    MIN_TEMPERATURE     = 0.005   # keep low-temperature refinement active
     RANDOM_SEED         = 31
 
     def _fitness(self, G, path: list) -> float:

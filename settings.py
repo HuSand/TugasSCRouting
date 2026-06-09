@@ -65,7 +65,9 @@ class Settings:
             "priority": 3,
         },
         "transport": {
-            "tags":     {"amenity": ["bus_station", "ferry_terminal", "fuel"]},
+            "tags":     {"amenity": ["bus_station", "ferry_terminal", "fuel"],
+                         "highway": ["bus_stop"],
+                         "public_transport": ["station", "platform", "stop_position"]},
             "priority": 3,
         },
         "community": {

@@ -308,3 +308,88 @@ class ResultVisualiser:
         plt.savefig(path, dpi=150, bbox_inches="tight")
         plt.close()
         log.info(f"  Chart -> comparison_chart.png")
+
+    def chart_convergence(self, results: List[RouteResult]):
+        history_results = [r for r in results if r.found and r.metadata.get("gen_history")]
+        if not history_results:
+            log.warning("No convergence history found — skipping convergence charts.")
+            return
+
+        algo_display = {
+            "ga": "Genetic Algorithm",
+            "gerald_sa": "Simulated Annealing",
+            "aco_elite_pro": "Ant Colony",
+            "particle_swarm": "Particle Swarm",
+        }
+        scenario_display = {
+            "emergency_patrol_circuit": "Emergency Patrol Circuit",
+            "terminal_circuit": "Terminal Circuit",
+        }
+
+        results_by_scenario = {}
+        for r in results:
+            if not r.found:
+                continue
+            if not r.metadata.get("gen_history"):
+                continue
+            results_by_scenario.setdefault(r.scenario_name, []).append(r)
+
+        for scenario_name, scenario_results in results_by_scenario.items():
+            scenario_label = scenario_display.get(
+                scenario_name,
+                scenario_name.replace("_", " ").title()
+            )
+            for r in sorted(scenario_results, key=lambda x: x.algorithm_name):
+                history = r.metadata["gen_history"]
+                if not history:
+                    continue
+
+                gens = [int(frame.get("gen", idx + 1)) for idx, frame in enumerate(history)]
+                best_times = [float(frame.get("min", 0.0)) for frame in history]
+                algo_label = algo_display.get(r.algorithm_name, r.algorithm_name)
+                color = ROUTE_COLOR_BY_ALGO.get(r.algorithm_name,
+                                               ROUTE_COLORS[hash(r.algorithm_name) % len(ROUTE_COLORS)])
+
+                fig, ax = plt.subplots(figsize=(10, 6))
+                plt.rcParams.update({"font.size": 10})
+
+                time_line, = ax.plot(
+                    gens,
+                    best_times,
+                    linewidth=2,
+                    label=f"{algo_label} Travel Time",
+                    color=color,
+                    alpha=0.9,
+                )
+
+                ax.set_xlabel("Generation")
+                ax.set_ylabel("Best Travel Time (min)")
+                ax.set_title(f"Convergence — {algo_label} — {scenario_label}")
+                ax.grid(True, linestyle="--", alpha=0.4)
+                ax.spines["top"].set_visible(False)
+
+                ax2 = ax.twinx()
+                dist_line, = ax2.plot(
+                    gens,
+                    [float(frame.get("dist", 0.0)) for frame in history],
+                    linewidth=2,
+                    linestyle="--",
+                    label=f"{algo_label} Distance",
+                    color="#6b7280",
+                    alpha=0.9,
+                )
+                ax2.set_ylabel("Best Distance (km)")
+                ax2.spines["top"].set_visible(False)
+
+                lines = [time_line, dist_line]
+                labels = [line.get_label() for line in lines]
+                ax.legend(lines, labels, fontsize=9, loc="best")
+
+                ax.spines["right"].set_visible(False)
+                ax2.spines["right"].set_visible(True)
+
+                plt.tight_layout()
+                path = self.out / f"convergence_{r.algorithm_name}_{scenario_name}.png"
+                plt.savefig(path, dpi=150, bbox_inches="tight")
+                plt.close()
+                log.info(f"  Chart -> convergence_{r.algorithm_name}_{scenario_name}.png")

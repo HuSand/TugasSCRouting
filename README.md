@@ -409,6 +409,8 @@ hasil utama ada di folder `data/`.
 | `comparison_results.csv` | Hasil mentah per algoritma dan skenario |
 | `comparison_summary.csv` | Ringkasan rata-rata performa per algoritma |
 | `comparison_chart.png` | Grafik travel time dan computation time |
+| `convergence_chart_emergency_patrol_circuit.png` | Grafik konvergensi per-generasi semua algoritma (emergency) |
+| `convergence_chart_terminal_circuit.png` | Grafik konvergensi per-generasi semua algoritma (terminal) |
 | `comparison_map_emergency_patrol_circuit.html` | Peta rute semua algoritma untuk skenario emergency |
 | `comparison_map_terminal_circuit.html` | Peta rute semua algoritma untuk skenario terminal |
 | `evolution_viewer.html` | Viewer interaktif evolusi rute untuk algoritma dengan history |

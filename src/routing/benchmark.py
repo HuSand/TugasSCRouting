@@ -973,6 +973,7 @@ def run_platform(cfg):
         scene_results = [r for r in runner.results if r.scenario_name == scenario.name]
         vis.map_scenario(G, scenario, scene_results)
     vis.chart_comparison(df)
+    vis.chart_convergence(runner.results)
 
     # ── GA Evolution Viewer ──────────────────────────────────
     from src.routing.evolve_viz import build_evolution_viewer
@@ -982,6 +983,7 @@ def run_platform(cfg):
     log.info("  comparison_results.csv    raw results per algorithm/scenario")
     log.info("  comparison_summary.csv    aggregate stats per algorithm")
     log.info("  comparison_chart.png      travel time + speed bar charts")
+    log.info("  convergence_<algorithm>_<scenario>.png  per-algorithm convergence charts")
     log.info("  comparison_map_*.html     route overlay maps (open in browser)")
     log.info("  evolution_viewer.html     GA evolution timeline (open in browser)")
     log.info("  (logs/)evolution_*.txt    per-generation log per GA algorithm")

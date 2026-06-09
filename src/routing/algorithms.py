@@ -3123,6 +3123,7 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
         best_cost = dijkstra_cost
 
         # ── Step 5: Loop iterasi koloni ──────────────────────────────
+        gen_history = []
         for iteration in range(self.N_ITERATIONS):
 
             # (a) Setiap semut bangun path
@@ -3161,13 +3162,28 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
             # (f) Rank-based deposit dari top-W semut iterasi ini
             self._deposit_rank_based(pheromone, tau_max, iteration_results)
 
+            # (g) Record generation history
+            coords = []
+            for n in best_path:
+                node = G.nodes.get(n)
+                if node:
+                    coords.append([round(float(node["y"]), 5),
+                                    round(float(node["x"]), 5)])
+            gen_history.append({
+                "gen":     iteration + 1,
+                "min":     round(best_cost / 60, 3),   # minutes
+                "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),  # km
+                "coords":  coords,
+                "streets": _route_streets(G, best_path),
+            })
+
         # ── Step 6: Or-opt post-processing ──────────────────────────
         optimized_path = self._or_opt(G, best_path)
         optimized_cost = self._path_cost(G, optimized_path)
         if optimized_cost < best_cost:
             best_path = optimized_path
 
-        return best_path
+        return best_path, gen_history
 
     def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
                           source_node: int = None,
@@ -3192,8 +3208,10 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
         best_order = [start] + middle + [end]
         best_cost = _tour_cost(best_order, pair_cost)
         pheromone = {}
+        recorder = _StopOrderFrameRecorder(G, "travel_time")
+        gen_history = []
 
-        for _ in range(self.N_ITERATIONS):
+        for iteration in range(self.N_ITERATIONS):
             iteration_best = None
             iteration_cost = float("inf")
 
@@ -3235,6 +3253,8 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                     best_order = iteration_best[:]
                     best_cost = iteration_cost
 
+            gen_history.append(recorder.frame(iteration, best_order))
+
         ms = (time.perf_counter() - t0) * 1000
         return _multi_stop_result(
             self, G, scenario_name, best_order, ms,
@@ -3247,6 +3267,7 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                 "rho": self.RHO,
                 "q": self.Q,
                 "w_rank": self.W_RANK,
+                "gen_history": gen_history,
             },
         )
 
@@ -3265,14 +3286,139 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
 
         t0 = time.perf_counter()
         try:
-            route = self._run_aco(G, source_node, target_node)
+            route, gen_history = self._run_aco(G, source_node, target_node)
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.build(
+                G, self.name, scenario_name,
+                source_node, target_node, route, ms,
+                metadata={
+                    "n_ants":           self.N_ANTS,
+                    "n_iterations":     self.N_ITERATIONS,
+                    "alpha":            self.ALPHA,
+                    "beta":             self.BETA,
+                    "rho":              self.RHO,
+                    "q":                self.Q,
+                    "tau_init":         self.TAU_INIT,
+                    "mmas_ratio":       self.MMAS_RATIO,
+                    "w_rank":           self.W_RANK,
+                    "top_k":            self.TOP_K,
+                    "bfs_radius":       self.BFS_RADIUS,
+                    "or_opt_max_seg":   self.OR_OPT_MAX_SEG,
+                    "subgraph_size":    "~200-800 nodes (BFS-2)",
+                    "pheromone_scheme": "MMAS (Min-Max Ant System)",
+                    "deposit_scheme":   f"rank-based top-{self.W_RANK}",
+                    "visibility":       "direction²_guided + haversine_cache",
+                    "post_processing":  f"Or-opt (seg 1-{self.OR_OPT_MAX_SEG}, max {self.OR_OPT_MAX_LEN} nodes)",
+                    "gen_history":      gen_history,
+                }
+            )
         except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
             ms = (time.perf_counter() - t0) * 1000
             return RouteResult.failure(
                 self.name, scenario_name,
                 source_node, target_node, str(e), ms
             )
-
+    # ══════════════════════════════════════════════════════════════════════════
+# 3.  AntColonyElitePro  — replace _run_aco and find_route
+# ══════════════════════════════════════════════════════════════════════════
+ 
+def _aco_elite_pro_run_aco_PATCHED(self, G, source, target):
+    import random, time
+    import networkx as nx
+ 
+    rng = random.Random(self.RANDOM_SEED)
+ 
+    try:
+        dijkstra_path = nx.shortest_path(G, source, target, weight="travel_time")
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        raise nx.NetworkXNoPath(
+            f"ACO-Elite Pro: tidak ada jalur dari {source} ke {target}"
+        )
+ 
+    dijkstra_cost   = self._path_cost(G, dijkstra_path)
+    subgraph_nodes  = self._build_subgraph(G, dijkstra_path)
+    candidate_lists = self._build_candidate_lists(G, subgraph_nodes)
+    max_steps       = min(len(subgraph_nodes) * 2, 2000)
+ 
+    tau_max, tau_min = self._compute_mmas_bounds(dijkstra_cost, len(subgraph_nodes))
+ 
+    pheromone: dict = {}
+    warmup_deposit = self.Q / dijkstra_cost if dijkstra_cost > 0 else 1.0
+    for u, v in zip(dijkstra_path[:-1], dijkstra_path[1:]):
+        init_val = min(self.TAU_INIT + warmup_deposit, tau_max)
+        pheromone[(u, v)] = init_val
+ 
+    best_path = dijkstra_path[:]
+    best_cost = dijkstra_cost
+    gen_history: list = []    # ← NEW
+ 
+    for iteration in range(self.N_ITERATIONS):
+        iteration_results: list = []
+ 
+        for _ in range(self.N_ANTS):
+            path = self._build_ant_path(
+                G, source, target,
+                pheromone, tau_min,
+                candidate_lists, rng, max_steps
+            )
+            if path is None or path[-1] != target:
+                continue
+            cost = self._path_cost(G, path)
+            if cost < float("inf"):
+                iteration_results.append((cost, path))
+ 
+        iteration_results.sort(key=lambda x: x[0])
+ 
+        if iteration_results:
+            iter_best_cost, iter_best_path = iteration_results[0]
+            if iter_best_cost < best_cost:
+                best_cost = iter_best_cost
+                best_path = iter_best_path[:]
+ 
+        tau_max, tau_min = self._compute_mmas_bounds(
+            best_cost, len(subgraph_nodes)
+        )
+        self._evaporate_and_clip(pheromone, tau_min, tau_max)
+        self._deposit_rank_based(pheromone, tau_max, iteration_results)
+ 
+        # ── record frame ──────────────────────────────────────────────
+        coords = []
+        for n in best_path:
+            nd = G.nodes.get(n)
+            if nd:
+                coords.append([round(float(nd["y"]), 5),
+                                round(float(nd["x"]), 5)])
+        gen_history.append({
+            "gen":     iteration + 1,
+            "min":     round(_ga_path_cost(G, best_path) / 60, 3),
+            "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),
+            "coords":  coords,
+            "streets": _route_streets(G, best_path),
+        })
+        # ─────────────────────────────────────────────────────────────
+ 
+    optimized_path = self._or_opt(G, best_path)
+    optimized_cost = self._path_cost(G, optimized_path)
+    if optimized_cost < best_cost:
+        best_path = optimized_path
+ 
+    return best_path, gen_history   # ← TUPLE
+ 
+ 
+    def _aco_elite_pro_find_route_PATCHED(self, G, source_node, target_node, scenario_name=""):
+        import time
+        import networkx as nx
+    
+        self._hav_cache = {}
+    
+        t0 = time.perf_counter()
+        try:
+            route, gen_history = self._run_aco(G, source_node, target_node)
+        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+            ms = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(self.name, scenario_name,
+                                    source_node, target_node, str(e), ms)
+    
         ms = (time.perf_counter() - t0) * 1000
         return RouteResult.build(
             G, self.name, scenario_name,
@@ -3294,9 +3440,17 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                 "pheromone_scheme": "MMAS (Min-Max Ant System)",
                 "deposit_scheme":   f"rank-based top-{self.W_RANK}",
                 "visibility":       "direction²_guided + haversine_cache",
-                "post_processing":  f"Or-opt (seg 1-{self.OR_OPT_MAX_SEG}, max {self.OR_OPT_MAX_LEN} nodes)",
+                "post_processing":  (
+                    f"Or-opt (seg 1-{self.OR_OPT_MAX_SEG}, "
+                    f"max {self.OR_OPT_MAX_LEN} nodes)"
+                ),
+                # ← evolution viewer fields
+                "generations":      self.N_ITERATIONS,
+                "population":       self.N_ANTS,
+                "gen_history":      gen_history,
             }
         )
+ 
     
     # ══════════════════════════════════════════════════════════════════
 # SECTION 6: SIMULATED ANNEALING (SA)

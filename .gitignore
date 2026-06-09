@@ -43,3 +43,7 @@ desktop.ini
 # ── Jupyter ───────────────────────────────────────────────────
 .ipynb_checkpoints/
 *.ipynb
+
+# ── Catatan/dokumentasi pribadi (jangan di-push) ──────────────
+BENCHMARK_PROCESS_TREE.txt
+GA_ALGORITHM_DETAILED_GUIDE.txt

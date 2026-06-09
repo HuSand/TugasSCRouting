@@ -87,7 +87,7 @@ def _clean_facilities(gdf: gpd.GeoDataFrame, cfg) -> gpd.GeoDataFrame:
     )
 
     type_col = pd.Series(index=df.index, dtype="object")
-    for col in ["amenity", "office", "healthcare"]:
+    for col in ["amenity", "office", "healthcare", "highway", "public_transport"]:
         if col in df.columns:
             type_col = type_col.fillna(df[col])
     df["facility_type"] = type_col.fillna("unknown")

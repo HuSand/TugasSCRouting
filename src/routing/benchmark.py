@@ -921,8 +921,6 @@ def run_platform(cfg):
     # registry.register(ChristofidesAlgorithm())    # TSP approximation (1.5x bound)
     registry.register(AntColonyElitePro())     
     # registry.register(AntColonyPrime())       # improved ACO with elite ants    
-    registry.register(GeraldSimulatedAnnealing()) # distance-minimising SA
-    registry.register(ParticleSwarmRouting())     # swarm path optimisation
     # registry.register(DijkstraTime())      # baseline: rute tercepat
     # registry.register(DijkstraDistance()) # baseline: rute terpendek
     # registry.register(AStarTime())        # baseline: A* tercepat
@@ -932,10 +930,8 @@ def run_platform(cfg):
     # registry.register(BurhanGA())         # Burhan
     # registry.register(BimoGA())           # Bimo
     # registry.register(GeraldGA())         # Gerald
-    registry.register(GeraldSimulatedAnnealing())  # Gerald SA shortest path
     # registry.register(AntColonyRouting())
     # registry.register(AntColonyElite())
-    registry.register(GeneticAlgorithm())         # TSP-GA visit-order evolution
     registry.register(GeraldSimulatedAnnealing()) # distance-based stop-order SA
     registry.register(ParticleSwarmRouting())     # swarm stop-order optimisation
     registry.summary()

@@ -551,6 +551,23 @@ class GeneticAlgorithm(BaseRoutingAlgorithm):
     TSP_PATIENCE        = 20    # stop early if no improvement for this many gens
     TSP_WORKERS         = 5     # parallel threads for pairwise precomputation
 
+    # ── Team Orienteering Problem hyperparameters ────────────────────────
+    TOP_POP_SIZE      = 40
+    TOP_GENERATIONS   = 120
+    TOP_PATIENCE      = 25
+    TOP_TOURNAMENT    = 3
+    TOP_MUTATION_RATE = 0.35
+
+    def solve_orienteering(self, problem, scenario_name: str = "", seed: int = 42):
+        """TOP via GA: kromosom = subset+permutasi titik, maksimasi jumlah kunjungan."""
+        from src.routing.orienteering import ga_orienteering
+        return ga_orienteering(
+            problem, self.name, scenario_name,
+            pop_size=self.TOP_POP_SIZE, generations=self.TOP_GENERATIONS,
+            tournament=self.TOP_TOURNAMENT, mutation_rate=self.TOP_MUTATION_RATE,
+            patience=self.TOP_PATIENCE, seed=seed,
+        )
+
     # ─────────────────────────────────────────────────────────────────────
 
     def _fitness(self, G, path: list) -> float:
@@ -2815,6 +2832,22 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
         "direction² visibility + haversine cache + subgraph BFS-2"
     )
 
+    # ── Team Orienteering Problem hyperparameters ────────────────────────
+    TOP_N_ANTS = 20
+    TOP_N_ITER = 30
+    TOP_ALPHA  = 1.0
+    TOP_BETA   = 3.0
+    TOP_RHO    = 0.10
+
+    def solve_orienteering(self, problem, scenario_name: str = "", seed: int = 42):
+        """TOP via ACO: semut bangun tur sampai budget habis, feromon perkuat tur terbanyak."""
+        from src.routing.orienteering import aco_orienteering
+        return aco_orienteering(
+            problem, self.name, scenario_name,
+            n_ants=self.TOP_N_ANTS, n_iter=self.TOP_N_ITER,
+            alpha=self.TOP_ALPHA, beta=self.TOP_BETA, rho=self.TOP_RHO, seed=seed,
+        )
+
     # ──────────────────────────────────────────────────────────────────
     # PARAMETER KOLONI
     # Semua parameter ini berpengaruh pada trade-off kualitas vs runtime.
@@ -3444,6 +3477,20 @@ class GeraldSimulatedAnnealing(BaseRoutingAlgorithm):
     name        = "gerald_sa"
     description = "Simulated Annealing — minimise physical distance"
 
+    # ── Team Orienteering Problem hyperparameters ────────────────────────
+    TOP_T0      = 1.5
+    TOP_COOLING = 0.9985
+    TOP_ITERS   = 5000
+
+    def solve_orienteering(self, problem, scenario_name: str = "", seed: int = 42):
+        """TOP via SA: move add/remove/swap titik, Metropolis pada skor jumlah kunjungan."""
+        from src.routing.orienteering import sa_orienteering
+        return sa_orienteering(
+            problem, self.name, scenario_name,
+            T0=self.TOP_T0, cooling=self.TOP_COOLING,
+            iters=self.TOP_ITERS, seed=seed,
+        )
+
     # ── SA parameters ─────────────────────────────────────────────────────
     ITERATIONS          = 1600    # total neighbour proposals
     INITIAL_TEMPERATURE = 1200.0  # high T → accept bad moves freely (exploration)
@@ -3791,6 +3838,20 @@ class ParticleSwarmRouting(BaseRoutingAlgorithm):
     """
     name        = "particle_swarm"
     description = "Particle Swarm Optimization — segment-mixing swarm on road paths"
+
+    # ── Team Orienteering Problem hyperparameters ────────────────────────
+    TOP_N_PARTICLES = 30
+    TOP_N_ITER      = 80
+    TOP_GBEST_PULL  = 0.6
+
+    def solve_orienteering(self, problem, scenario_name: str = "", seed: int = 42):
+        """TOP via PSO: partikel = subset+order, tarik ke gbest + mutasi, repair feasibility."""
+        from src.routing.orienteering import pso_orienteering
+        return pso_orienteering(
+            problem, self.name, scenario_name,
+            n_particles=self.TOP_N_PARTICLES, n_iter=self.TOP_N_ITER,
+            gbest_pull=self.TOP_GBEST_PULL, seed=seed,
+        )
 
     # ── PSO parameters ────────────────────────────────────────────────────
     N_PARTICLES      = 40    # swarm size — more particles → broader search

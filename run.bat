@@ -66,12 +66,15 @@ echo   3   Routing demonstrations
 echo   4   Algorithm comparison benchmark
 echo   7   Algorithm comparison benchmark  (parallel legs, max CPU)
 echo   ---------------------------------------------------------
-echo   5   Run full pipeline  (1 -^> 2 -^> 3 -^> 4)
+echo   8   TOP training - maximise points visited  (MAIN DELIVERABLE)
+echo   9   Open Route Viewer + Insight  (run 8 first)
+echo   ---------------------------------------------------------
+echo   5   Run full pipeline  (1 -^> 2 -^> 3 -^> 4 -^> 8)
 echo   6   Open GA Evolution Viewer  (run 4 first)
 echo.
 echo   0   Exit
 echo.
-set /p "CHOICE= Select [0-7]: "
+set /p "CHOICE= Select [0-9]: "
 
 if "%CHOICE%"=="1" goto :DO1
 if "%CHOICE%"=="2" goto :DO2
@@ -80,6 +83,8 @@ if "%CHOICE%"=="4" goto :DO4
 if "%CHOICE%"=="5" goto :DO5
 if "%CHOICE%"=="6" goto :DO6
 if "%CHOICE%"=="7" goto :DO7
+if "%CHOICE%"=="8" goto :DO8
+if "%CHOICE%"=="9" goto :DO9
 if "%CHOICE%"=="0" exit /b 0
 echo  Pilihan tidak valid.
 timeout /t 1 >nul
@@ -113,6 +118,25 @@ goto :BACK
 :DO7
 echo.
 "%PY%" main.py compare --parallel-legs
+goto :BACK
+
+:DO8
+echo.
+"%PY%" main.py train
+goto :BACK
+
+:DO9
+echo.
+if exist "data\route_viewer.html" (
+    echo  Opening Route Viewer in browser...
+    start "" "data\route_viewer.html"
+) else (
+    echo  [INFO] route_viewer.html not found. Run option 8 ^(TOP training^) first.
+)
+if exist "data\insight_report.txt" (
+    echo  Opening Insight Report...
+    start "" "data\insight_report.txt"
+)
 goto :BACK
 
 :DO6

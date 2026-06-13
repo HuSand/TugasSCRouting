@@ -39,6 +39,11 @@ class Vehicle:
     fuel_efficiency_kpl: float
     range_km:            float
     refill_threshold_km: float = 20.0
+    # ── Team Orienteering Problem (TOP) ──
+    width_m:             float = 0.8    # lebar fisik kendaraan (m) untuk constraint jalan
+    avg_speed_kph:       float = 40.0   # kecepatan rata-rata (untuk insight)
+    service_time_s:      float = 600.0  # 10 menit per titik
+    shift_seconds:       float = 21600.0  # 6 jam per shift
 
     @staticmethod
     def from_settings(cfg, vehicle_type: str = None) -> "Vehicle":
@@ -55,6 +60,10 @@ class Vehicle:
             fuel_efficiency_kpl = info["fuel_efficiency_kpl"],
             range_km            = info["range_km"],
             refill_threshold_km = cfg.FUEL_REFILL_THRESHOLD_KM,
+            width_m             = info.get("width_m", 0.8),
+            avg_speed_kph       = info.get("avg_speed_kph", 40.0),
+            service_time_s      = float(getattr(cfg, "SERVICE_TIME_S", 600)),
+            shift_seconds       = float(getattr(cfg, "SHIFT_SECONDS", 21600)),
         )
     
     
@@ -252,5 +261,50 @@ class BaseRoutingAlgorithm(ABC):
             elapsed = (time.perf_counter() - t0) * 1000
             return RouteResult.failure(
                 self.name, scenario_name, source_node, target_node,
+                traceback.format_exc(), elapsed,
+            )
+
+    # ──────────────────────────────────────────────────────────
+    # Team Orienteering Problem (TOP) entry point
+    # ──────────────────────────────────────────────────────────
+
+    def solve_orienteering(self,
+                           problem,
+                           scenario_name: str = "",
+                           seed: int = 42) -> RouteResult:
+        """
+        Maksimasi jumlah titik distinct yang dikunjungi dari depot kembali ke
+        depot, di bawah time budget shift (travel_time + service_time per titik).
+
+        Default: greedy insertion (cheapest feasible insertion). Tiap model
+        (GA/ACO/SA/PSO) meng-override method ini dengan strategi pencarian
+        masing-masing. Semua memakai helper feasibility/expand yang sama di
+        src/routing/orienteering.py supaya konsisten.
+
+        Parameters
+        ----------
+        problem : OrienteeringProblem  (src/routing/orienteering.py)
+            Berisi G (sudah terfilter lebar jalan), depot, pool_nodes, budget_s,
+            service_s, exclude set, pair_cost, koordinat.
+        scenario_name : label untuk tagging hasil.
+
+        Returns
+        -------
+        RouteResult dengan metadata: visited_stops, visited_count, shift, vehicle.
+        """
+        from src.routing.orienteering import greedy_insertion
+        # Default greedy bersifat deterministik → seed diabaikan.
+        return greedy_insertion(problem, self.name, scenario_name)
+
+    def safe_orienteering(self, problem, scenario_name: str = "", seed: int = 42) -> RouteResult:
+        """Wrap solve_orienteering dengan exception handling."""
+        t0 = time.perf_counter()
+        try:
+            return self.solve_orienteering(problem, scenario_name, seed)
+        except Exception:
+            elapsed = (time.perf_counter() - t0) * 1000
+            return RouteResult.failure(
+                self.name, scenario_name,
+                problem.depot, problem.depot,
                 traceback.format_exc(), elapsed,
             )

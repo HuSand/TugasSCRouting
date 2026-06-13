@@ -84,6 +84,7 @@ class ResultVisualiser:
             )
 
             # Ambil koordinat (lat, lon) tiap node dalam route
+            route_to_draw = r.metadata.get("route_with_fuel") or r.route
             coords = []
             for n in r.route:
                 node = G.nodes.get(n)
@@ -93,18 +94,40 @@ class ResultVisualiser:
             if len(coords) < 2:
                 continue
 
+            # Info fuel untuk popup
+            refill_count      = r.metadata.get("refill_count", 0)
+            fuel_remaining_km = r.metadata.get("fuel_remaining_km")
+            vehicle_type      = r.metadata.get("vehicle_type", "")
+            fuel_feasible     = r.metadata.get("fuel_feasible", True)
+
+            if refill_count:
+                fuel_emoji = "✓" if fuel_feasible else "✗"
+                sisa_str   = f"{fuel_remaining_km:.1f} km" if isinstance(fuel_remaining_km, float) else "-"
+                fuel_info  = (
+                    f"<hr style='margin:4px 0'>"
+                    f"<b>⛽ Fuel ({vehicle_type})</b><br>"
+                    f"Refill : {refill_count}x {fuel_emoji}<br>"
+                    f"Sisa   : {sisa_str}"
+                )
+            else:
+                fuel_info = ""
+
             streets    = _route_street_names(G, r.route)
             street_str = " -> ".join(streets) if streets else "-"
             popup_html = (
                 f"<b>{r.algorithm_name}</b><br>"
                 f"Waktu : {r.total_time_s/60:.1f} menit<br>"
                 f"Jarak : {r.total_distance_m/1000:.2f} km<br>"
+                f"{fuel_info}"
                 f"<hr style='margin:4px 0'>"
                 f"<small><b>Rute:</b><br>{street_str}</small>"
             )
-            tooltip = (f"{r.algorithm_name} | "
-                       f"{r.total_time_s/60:.1f}min | "
-                       f"{r.total_distance_m/1000:.2f}km")
+            tooltip = (
+                f"{r.algorithm_name} | "
+                f"{r.total_time_s/60:.1f}min | "
+                f"{r.total_distance_m/1000:.2f}km"
+                + (f" | ⛽{refill_count}x" if refill_count else "")
+            )
 
             folium.PolyLine(
                 coords,
@@ -115,6 +138,34 @@ class ResultVisualiser:
                 popup=folium.Popup(popup_html, max_width=320),
             ).add_to(m)
             drawn.append((i, r, color))
+
+        # ── SPBU markers ─────────────────────────────────────────────────
+        # Kumpulkan semua node SPBU unik dari semua algoritma,
+        # gambar satu marker per node (deduplikasi).
+        spbu_node_coords: dict = {}
+        spbu_algo_labels: dict = {}
+
+        for r in results:
+            for node_id in r.metadata.get("fuel_stops", []):
+                node = G.nodes.get(node_id)
+                if node:
+                    spbu_node_coords[node_id] = (float(node["y"]), float(node["x"]))
+                    spbu_algo_labels.setdefault(node_id, set()).add(r.algorithm_name)
+
+        for node_id, (lat, lon) in spbu_node_coords.items():
+            algos     = ", ".join(sorted(spbu_algo_labels[node_id]))
+            popup_body = (
+                f"<b>⛽ SPBU / Fuel Stop</b><br>"
+                f"<small>Node: {node_id}</small><br>"
+                f"<hr style='margin:4px 0'>"
+                f"Disinggahi oleh:<br><small>{algos}</small>"
+            )
+            folium.Marker(
+                [lat, lon],
+                popup=folium.Popup(popup_body, max_width=220),
+                tooltip=f"⛽ SPBU (dipakai: {algos})",
+                icon=folium.Icon(color="black", icon="tint", prefix="glyphicon"),
+            ).add_to(m)
 
         # ── Stop markers ──────────────────────────────────────────────────
         # If any algorithm recorded a visit_order in its metadata, use the
@@ -211,11 +262,21 @@ class ResultVisualiser:
             "<hr style='margin:4px 0'>"
         )
         for i, r, c in drawn:
+            refill_count = r.metadata.get("refill_count")
+            fuel_tag     = f" &nbsp;⛽{refill_count}x" if refill_count else ""
             legend += (
                 f"<span style='color:{c};font-size:18px;'>&#9644;</span> "
                 f"<b>{r.algorithm_name}</b> &nbsp;"
                 f"{r.total_time_s/60:.1f}min &nbsp;"
                 f"{r.total_distance_m/1000:.2f}km<br>"
+                f"{fuel_tag}<br>"
+            )
+        # Keterangan ikon SPBU kalau ada fuel stop di peta
+        if spbu_node_coords:
+            legend += (
+                "<hr style='margin:4px 0'>"
+                "<span style='font-size:13px;'>&#128981;</span> "
+                f"<small>SPBU singgah ({len(spbu_node_coords)} lokasi)</small><br>"
             )
         legend += "<hr style='margin:4px 0'><small>Klik rute untuk detail nama jalan</small></div>"
         m.get_root().html.add_child(folium.Element(legend))

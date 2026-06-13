@@ -1,10 +1,13 @@
-Extraction Report — Surabaya, Indonesia
+Extraction Report ï¿½ Surabaya, Indonesia
 Generated: 2026-06-09T23:31:21.828039
+Generated: 2026-06-09T23:02:41.600588
 ==================================================
 
 FACILITIES
   education: 1697
+  education: 1697
   community: 1145
+  transport: 1068
   transport: 1068
   government: 698
   healthcare: 436
@@ -17,13 +20,17 @@ ROAD NETWORK
 
 SNAP QUALITY
   Mean: 48.5m
+  Mean: 48.5m
   >500m: 6 facilities
 
 OUTPUT FILES
+  comparison_chart.png: 76.9 KB
   comparison_chart.png: 77.8 KB
   comparison_map_ciputra_to_rsu_haji.html: 51.3 KB
   comparison_map_cross_city_zigzag_7.html: 213.7 KB
   comparison_map_darmo_to_rsu_haji.html: 34.3 KB
+  comparison_map_emergency_patrol_circuit.html: 374.6 KB
+  comparison_map_emergency_west_to_east_5.html: 149.8 KB
   comparison_map_emergency_patrol_circuit.html: 376.0 KB
   comparison_map_emergency_west_to_east_5.html: 149.8 KB
   comparison_map_full_city_patrol_9.html: 235.8 KB
@@ -32,6 +39,8 @@ OUTPUT FILES
   comparison_map_police_healthcare_patrol_5.html: 123.2 KB
   comparison_map_polsek_genteng_to_rs_darmo.html: 27.2 KB
   comparison_map_polsek_rungkut_to_rs_onkologi.html: 34.4 KB
+  comparison_map_terminal_circuit.html: 228.0 KB
+  comparison_results.csv: 193.32 MB
   comparison_map_south_east_emergency_chain_5.html: 93.8 KB
   comparison_map_terminal_circuit.html: 213.2 KB
   comparison_map_west_central_east_response_5.html: 111.0 KB

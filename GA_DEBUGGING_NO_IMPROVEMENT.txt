@@ -1,0 +1,382 @@
+================================================================================
+GA DEBUGGING: WHY VISIT ORDER ISN'T CHANGING (NO IMPROVEMENT)
+================================================================================
+
+## THE PROBLEM YOU SPOTTED
+
+From your gen_history, visit_order is IDENTICAL across all generations:
+
+Generation 1: [5539027568, 6935515705, 1721971962, ..., 5539027568]
+Generation 2: [5539027568, 6935515705, 1721971962, ..., 5539027568]  ← SAME!
+Generation 3: [5539027568, 6935515705, 1721971962, ..., 5539027568]  ← SAME!
+...
+Generation 20: [5539027568, 6935515705, 1721971962, ..., 5539027568]  ← SAME!
+
+This means:
+✗ GA is NOT evolving the permutation
+✗ Each generation has the same best_perm
+✗ The population isn't diversifying
+✗ Crossover and mutation aren't creating different offspring
+
+================================================================================
+## ROOT CAUSE ANALYSIS
+
+There are 5 possible reasons:
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ CAUSE 1: EARLY STOPPING TRIGGERED IMMEDIATELY                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Code in GA._route_multi_stop():                                    │
+│                                                                     │
+│   for gen_idx in range(TSP_GENERATIONS):  # 30 generations max     │
+│     fitness = [tour_cost(p) for p in population]                   │
+│     best_idx = min(range(len(population)), key=lambda i: fitness[i])│
+│     elite = population[best_idx]                                   │
+│                                                                     │
+│     if fitness[best_idx] < best_cost - 1e-6:  ← CHECK IMPROVEMENT │
+│       best_perm = elite[:]                                         │
+│       best_cost = fitness[best_idx]                                │
+│       no_improve = 0  ← RESET COUNTER                              │
+│     else:                                                           │
+│       no_improve += 1  ← INCREMENT COUNTER                         │
+│                                                                     │
+│     if no_improve >= TSP_PATIENCE:  # 20 consecutive gens          │
+│       break  ← STOP EARLY!                                         │
+│                                                                     │
+│ If gen 1-20 show no improvement, it will STOP at gen 20.           │
+│ But if initial population is terrible and stays terrible,          │
+│ you'd expect it to keep the same best anyway.                      │
+│                                                                     │
+│ DETECTION: Check logs for "early stop at gen X"                    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ CAUSE 2: POPULATION ISN'T CHANGING (MUTATION TOO WEAK)              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Current hyperparameters:                                           │
+│   CROSSOVER_RATE = 0.85  (85% of new individuals get crossover)   │
+│   MUTATION_RATE = 0.6    (60% of children get mutated)            │
+│   TOURNAMENT_SIZE = 5                                              │
+│   TSP_POPULATION_SIZE = 20                                         │
+│                                                                     │
+│ What happens each generation:                                      │
+│   1. Keep best individual (elitism) ← 1 individual                │
+│   2. Create 19 new individuals:                                    │
+│      - 85% (16) get crossover                                      │
+│      - 15% (3) are just clones of tournament winners               │
+│      - 60% (12) of all 19 get mutated                              │
+│                                                                     │
+│ PROBLEM: If initial population is very similar:                    │
+│   • Crossover of similar parents → similar children                │
+│   • Mutation (one swap) on 47 stops → tiny change                  │
+│   • Tournament selection → always picks similar winners            │
+│                                                                     │
+│ Result: Population converges to same permutation instantly!        │
+│                                                                     │
+│ SOLUTION: Increase MUTATION_RATE                                   │
+│   Current: 0.6 (60%)                                               │
+│   Try:     0.8 (80%) or 0.9 (90%)                                  │
+│                                                                     │
+│ Or do MORE swaps per mutation (currently: one swap)                │
+│   Current code: swap 2 random positions (1 swap)                   │
+│   Better: do 2-3 swaps per mutation                                │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ CAUSE 3: TOURNAMENT SIZE TOO LARGE (WEAK SELECTION PRESSURE)        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Current: TOURNAMENT_SIZE = 5                                       │
+│   Picks 5 random individuals, returns the best                     │
+│                                                                     │
+│ With population of 20:                                             │
+│   Random pick of 5 means ~25% of population in each tournament     │
+│   Usually picks from the top 25% → weak pressure for improvement  │
+│                                                                     │
+│ COMPARISON:                                                         │
+│   Tournament size 2: Very greedy, fast convergence                │
+│   Tournament size 5: Moderate (current)                            │
+│   Tournament size 10: Weak, allows mediocre individuals            │
+│                                                                     │
+│ SOLUTION: Reduce TOURNAMENT_SIZE                                   │
+│   Current: 5                                                        │
+│   Try:     2 or 3  (more greedy selection)                         │
+│                                                                     │
+│ This forces better solutions to be selected more often.            │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ CAUSE 4: INITIAL POPULATION IS VERY GOOD (LUCKY START)             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Code:                                                               │
+│   population = []                                                   │
+│   for _ in range(TSP_POPULATION_SIZE):                             │
+│     perm = intermediates[:]                                        │
+│     rng.shuffle(perm)  ← RANDOM SHUFFLE                            │
+│     population.append(perm)                                        │
+│                                                                     │
+│ If you're unlucky with the seed, random shuffle might create      │
+│ a good permutation by chance, and others are also decent.         │
+│                                                                     │
+│ This makes it hard to improve → population gets stuck.             │
+│                                                                     │
+│ DETECTION:                                                          │
+│   Look at gen 1 cost (e.g., 303.8 minutes)                        │
+│   Is it very good? Or very bad?                                    │
+│                                                                     │
+│ DIAGNOSIS:                                                          │
+│   If gen 1 is already near-optimal (like < 30 min for emergency)  │
+│   then random initialization was lucky.                            │
+│                                                                     │
+│ SOLUTION: Change RANDOM_SEED                                       │
+│   Current: RANDOM_SEED = 42                                        │
+│   Try:     RANDOM_SEED = 99 or 123 or 999                         │
+│                                                                     │
+│ Different seed → different initial population.                     │
+│ If problem persists, it's not just luck.                           │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ CAUSE 5: BUG IN OX CROSSOVER (NOT ACTUALLY MIXING)                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Code (simplified):                                                  │
+│   def ox_crossover(p1, p2):                                        │
+│     size = len(p1)                                                 │
+│     if size < 2:                                                   │
+│       return p1[:]  ← BUG: Returns parent 1 as-is!                │
+│     # ... rest of crossover                                        │
+│                                                                     │
+│ PROBLEM: If size < 2, returns clone, not offspring.                │
+│                                                                     │
+│ But in your case with 46 intermediate nodes, size should be 46.    │
+│ So this shouldn't be triggered.                                    │
+│                                                                     │
+│ DEEPER BUG: Check if OX is actually being called.                  │
+│   Code snippet from ga loop:                                       │
+│     if rng.random() < self.CROSSOVER_RATE:  # 85% chance          │
+│       p2 = _ga_tournament(population, fitness, ...)               │
+│       child = ox_crossover(p1, p2)  ← Is this executing?          │
+│     else:                                                           │
+│       child = p1[:]  ← Or are we taking this path?                │
+│                                                                     │
+│ If random() is consistently returning < 0.85 AND consistently     │
+│ returning > 0.85 (impossible), something is wrong with RNG.       │
+│                                                                     │
+│ SOLUTION: Add logging to verify OX is being called                 │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+## DIAGNOSIS FLOWCHART
+
+START: Visit order doesn't change across generations
+│
+├─ STEP 1: Check early stopping
+│  │
+│  └─ Look at logs for: "GA TSP: early stop at gen X"
+│     └─ If YES → Population converged, no improvement found
+│     └─ If NO → Population didn't converge, visit order just stuck
+│
+├─ STEP 2: Check initial population quality
+│  │
+│  └─ Look at gen_history[0]['min']
+│     └─ If < 200 minutes → Got lucky, initial pop is good
+│     └─ If > 300 minutes → Initial pop is bad, should improve
+│
+├─ STEP 3: Check if population is actually changing
+│  │
+│  └─ Look at gen_history for 5-10 consecutive gens
+│     └─ Extract coords from each gen's route
+│     └─ Are they identical or different?
+│        └─ If identical → population not diversifying
+│        └─ If different but cost same → local optima
+│
+├─ STEP 4: Check hyperparameters
+│  │
+│  └─ Current values:
+│     TSP_POPULATION_SIZE = 20      (reasonable)
+│     TSP_GENERATIONS = 30          (reasonable)
+│     TSP_PATIENCE = 20             (might stop too early)
+│     CROSSOVER_RATE = 0.85         (reasonable)
+│     MUTATION_RATE = 0.6           (might be too weak)
+│     TOURNAMENT_SIZE = 5           (might be too large)
+│
+└─ STEP 5: Check random seed
+   │
+   └─ If steps 1-4 don't explain it
+      Try changing RANDOM_SEED = 123 (different initial population)
+
+================================================================================
+## RECOMMENDED FIXES (In Priority Order)
+
+┌────────────────────────────────────────────────────────────────┐
+│ FIX 1: Increase MUTATION_RATE (HIGHEST PRIORITY)              │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│ File: src/routing/algorithms.py, line 550                     │
+│                                                                │
+│ Current:                                                       │
+│   MUTATION_RATE = 0.6  # 60% of individuals mutated           │
+│                                                                │
+│ Change to:                                                     │
+│   MUTATION_RATE = 0.9  # 90% of individuals mutated           │
+│                                                                │
+│ This forces more diversity in the population.                 │
+│ Even if crossover produces similar offspring,                 │
+│ 90% mutation means most will be different.                    │
+│                                                                │
+│ ALSO MODIFY: The swap_mutate function (line 725)             │
+│                                                                │
+│ Current:                                                       │
+│   def swap_mutate(perm):                                      │
+│     i, j = rng.sample(range(len(p)), 2)                      │
+│     p[i], p[j] = p[j], p[i]                                  │
+│     return p                                                   │
+│                                                                │
+│ Better (do multiple swaps):                                   │
+│   def swap_mutate(perm):                                      │
+│     p = perm[:]                                               │
+│     # Do 2-3 random swaps per mutation                        │
+│     for _ in range(rng.randint(2, 3)):                        │
+│       i, j = rng.sample(range(len(p)), 2)                    │
+│       p[i], p[j] = p[j], p[i]                                │
+│     return p                                                   │
+│                                                                │
+│ This creates MORE change per mutation operation.              │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│ FIX 2: Reduce TOURNAMENT_SIZE (MEDIUM PRIORITY)               │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│ File: src/routing/algorithms.py, line 542                     │
+│                                                                │
+│ Current:                                                       │
+│   TOURNAMENT_SIZE = 5  # Pick 5 random, return best           │
+│                                                                │
+│ Change to:                                                     │
+│   TOURNAMENT_SIZE = 3  # Pick 3 random, return best           │
+│                                                                │
+│ This increases selection pressure:                            │
+│ • Better solutions are selected more often                    │
+│ • Weaker solutions are filtered out faster                    │
+│ • Population converges faster but to better optima            │
+│                                                                │
+│ Effect:                                                        │
+│   Smaller tournament = more exploitation (intensify search)   │
+│   Larger tournament = more exploration (diversify)            │
+│                                                                │
+│ With stuck population, you want exploitation.                 │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│ FIX 3: Lower TSP_PATIENCE (LOWER PRIORITY)                    │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│ File: src/routing/algorithms.py, line 551                     │
+│                                                                │
+│ Current:                                                       │
+│   TSP_PATIENCE = 20  # Stop if no improvement for 20 gens     │
+│                                                                │
+│ Change to:                                                     │
+│   TSP_PATIENCE = 5  # Stop if no improvement for 5 gens       │
+│                                                                │
+│ Effect: Stops faster if stuck, frees up compute time.         │
+│                                                                │
+│ Downside: Might stop too early on a slow-improving problem.   │
+│                                                                │
+│ Only do this AFTER fixing mutation/tournament.                │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+================================================================================
+## VERIFICATION STEPS (After Making Changes)
+
+1. Run the benchmark again:
+   python main.py compare
+
+2. Check the new gen_history:
+   Look at data/comparison_results.csv for GA results
+
+3. Extract the evolution log:
+   Find logs/evolution_GeneticAlgorithm_*.txt
+   Check if gens are improving now
+
+4. Expected output (GOOD):
+   Gen  1: best_cost = 2500.0
+   Gen  2: best_cost = 2480.0  ← Improving
+   Gen  3: best_cost = 2400.0  ← Still improving
+   Gen  4: best_cost = 2380.0  ← Still improving
+   ...
+   Gen 20: best_cost = 2145.3  ← Final best
+
+5. Expected output (BAD - same as now):
+   Gen  1: best_cost = 2500.0
+   Gen  2: best_cost = 2500.0  ← NO CHANGE
+   Gen  3: best_cost = 2500.0  ← NO CHANGE
+   Gen  4: best_cost = 2500.0  ← NO CHANGE
+
+================================================================================
+## QUICK TEST (To verify the fix works)
+
+Add this to GeneticAlgorithm class (line 550):
+
+   # TEMPORARY: Print hyperparameters for debugging
+   if gen_idx == 0:
+     log.info(f"[DEBUG] MUTATION_RATE={self.MUTATION_RATE}, TOURNAMENT_SIZE={self.TOURNAMENT_SIZE}")
+     log.info(f"[DEBUG] Gen 0: Initial cost={tour_cost(intermediates)}")
+
+Then check logs to see:
+   • Are hyperparameters what you expect?
+   • Is gen 0 cost reasonable or suspiciously good?
+
+================================================================================
+## WHAT EACH FIX DOES
+
+┌──────────────────────────────┬──────────────┬──────────────────────────────┐
+│ Fix                          │ Effect       │ When to Use                  │
+├──────────────────────────────┼──────────────┼──────────────────────────────┤
+│ MUTATION_RATE: 0.6 → 0.9    │ + Diversity  │ ALWAYS (first try)           │
+│                              │ + Change     │                              │
+│                              │              │                              │
+│ Swap 1 → 2-3 swaps          │ + Change     │ If still stuck after mut↑    │
+│                              │ + Diversity  │                              │
+│                              │              │                              │
+│ TOURNAMENT_SIZE: 5 → 3      │ + Selection  │ If population converges too  │
+│                              │   pressure   │ early to mediocre solutions  │
+│                              │ + Intensity  │                              │
+│                              │              │                              │
+│ TSP_PATIENCE: 20 → 5        │ - Time       │ LAST (only after other fixes)│
+│                              │ - Quality    │ Stops early if still stuck   │
+│                              │              │                              │
+└──────────────────────────────┴──────────────┴──────────────────────────────┘
+
+================================================================================
+## EXPECTED BEHAVIOR AFTER FIXES
+
+BEFORE (Current Problem):
+  Gen 1: [A, B, C, D, ..., Z] cost=2500s  ← Initial
+  Gen 2: [A, B, C, D, ..., Z] cost=2500s  ← NO CHANGE
+  Gen 3: [A, B, C, D, ..., Z] cost=2500s  ← NO CHANGE
+  Result: ❌ STUCK, NO IMPROVEMENT
+
+AFTER (With MUTATION_RATE=0.9 + 2-3 swaps):
+  Gen 1: [A, B, C, D, ..., Z] cost=2500s  ← Initial
+  Gen 2: [A, B, D, C, ..., Z] cost=2480s  ← Changed! Improved!
+  Gen 3: [A, D, B, C, ..., Z] cost=2400s  ← Changed! Improved!
+  Gen 4: [D, A, C, B, ..., Z] cost=2380s  ← Changed! Improved!
+  ...
+  Gen 20: [C, B, E, D, ..., Z] cost=2145s ← Much better!
+  Result: ✓ EVOLVING, IMPROVING ACROSS GENS
+
+================================================================================

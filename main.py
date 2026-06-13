@@ -89,11 +89,17 @@ def _compare(cfg):
     run_platform(cfg)
 
 
+def _train(cfg):
+    from src.routing.training import run_multi_vehicle_training
+    run_multi_vehicle_training(cfg)
+
+
 STEPS = {
     "extract": ("Extract facilities + road network from OSM", _extract),
     "explore": ("Profile and visualize extracted data",       _explore),
     "demo":    ("Run baseline routing demonstrations",        _demo),
     "compare": ("Run algorithm comparison benchmark",         _compare),
+    "train":   ("Multi-vehicle TOP training (maximise visits)", _train),
 }
 
 
@@ -105,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     desc_lines = ["Available commands:"]
     for cmd, (desc, _) in STEPS.items():
         desc_lines.append(f"  {cmd:<10}  {desc}")
-    desc_lines.append(f"  {'all':<10}  Run full pipeline (extract -> explore -> demo -> compare)")
+    desc_lines.append(f"  {'all':<10}  Run full pipeline (extract -> explore -> demo -> compare -> train)")
 
     parser = argparse.ArgumentParser(
         prog="python main.py",
@@ -129,6 +135,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable leg-level parallelism in benchmark (more CPU cores, higher RAM usage)",
     )
+    parser.add_argument(
+        "--vehicle",
+        choices=["motor", "mobil"],
+        default=None,
+        metavar="VEHICLE",
+        help="Jenis kendaraan: motor (default) atau mobil",
+    )
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Jumlah iterasi training per model per kendaraan (default: settings.TRAINING_ITERATIONS=10)",
+    )
     return parser
 
 
@@ -145,6 +165,10 @@ def main():
     if args.no_log_file:
         cfg.LOG_TO_FILE = False
     cfg.PARALLEL_LEGS = args.parallel_legs
+    if args.vehicle:
+        cfg.DEFAULT_VEHICLE = args.vehicle
+    if args.iterations is not None:
+        cfg.TRAINING_ITERATIONS = args.iterations
 
     log = setup_logging(cfg)
     log.info("Surabaya Public Facility Routing Platform")

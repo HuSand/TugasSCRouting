@@ -885,6 +885,8 @@ def run_platform(cfg):
         AntColonyElitePro,
     )
     from src.routing.visualize import ResultVisualiser
+    from src.routing.base import Vehicle
+    from src.routing.fuel import inject_fuel_stops, extract_spbu_nodes
 
     # Load data
     fac_path = cfg.DATA_DIR / "facilities_with_network.geojson"
@@ -911,6 +913,14 @@ def run_platform(cfg):
     fac = fac.dropna(subset=["nearest_node"])
     fac["nearest_node"] = fac["nearest_node"].astype(int)
     log.info(f"Graph: {G.number_of_nodes()} nodes  |  Facilities: {len(fac)}")
+
+    # ── Vehicle & Fuel Setup ─────────────────────────────────
+    vehicle    = Vehicle.from_settings(cfg)
+    spbu_nodes = extract_spbu_nodes(fac)
+    log.info(f"Vehicle : {vehicle.label} | "
+             f"range={vehicle.range_km:.0f}km | "
+             f"threshold={vehicle.refill_threshold_km:.0f}km | "
+             f"SPBU={len(spbu_nodes)} nodes")
 
     # ── Register algorithms ──────────────────────────────────
     # Every model implements _route_multi_stop for category scenarios:
@@ -956,6 +966,43 @@ def run_platform(cfg):
     df      = runner.run(G, parallel_legs=getattr(cfg, "PARALLEL_LEGS", False))
     summary = runner.summary(df)
 
+    # ── Fuel Post-Processing ─────────────────────────────────
+    log.info(f"\nApplying fuel constraints ({vehicle.label}, "
+             f"range={vehicle.range_km:.0f}km)...")
+    fuel_rows = []
+    for result in runner.results:
+        if not result.found or len(result.route) < 2:
+            continue
+        fuel_res = inject_fuel_stops(G, result.route, spbu_nodes, vehicle)
+
+        # Simpan fuel info ke metadata result (bisa dipakai visualiser)
+        result.metadata["fuel_stops"]        = fuel_res.fuel_stops
+        result.metadata["refill_count"]      = fuel_res.refill_count
+        result.metadata["fuel_remaining_km"] = fuel_res.fuel_remaining_km
+        result.metadata["vehicle_type"]      = fuel_res.vehicle_type
+        result.metadata["fuel_feasible"]     = fuel_res.feasible
+        result.metadata["fuel_warning"]      = fuel_res.warning
+        result.metadata["route_with_fuel"]   = fuel_res.route
+
+        fuel_rows.append({
+            "algorithm":        result.algorithm_name,
+            "scenario":         result.scenario_name,
+            "vehicle":          vehicle.label,
+            "refill_count":     fuel_res.refill_count,
+            "fuel_remaining_km":fuel_res.fuel_remaining_km,
+            "feasible":         fuel_res.feasible,
+            "warning":          fuel_res.warning,
+        })
+        status = "✓" if fuel_res.feasible else "✗ INFEASIBLE"
+        log.info(f"  [{result.algorithm_name}] {result.scenario_name}: "
+                 f"{fuel_res.refill_count} refill(s), "
+                 f"sisa={fuel_res.fuel_remaining_km:.1f}km {status}")
+
+    if fuel_rows:
+        fuel_df = pd.DataFrame(fuel_rows)
+        fuel_df.to_csv(cfg.DATA_DIR / "fuel_results.csv", index=False)
+        log.info("Saved -> fuel_results.csv")
+
     df.to_csv(cfg.DATA_DIR / "comparison_results.csv", index=False)
     log.info(f"Saved -> comparison_results.csv")
     if not summary.empty:
@@ -978,6 +1025,7 @@ def run_platform(cfg):
     log.info("\nOutputs in data/:")
     log.info("  comparison_results.csv    raw results per algorithm/scenario")
     log.info("  comparison_summary.csv    aggregate stats per algorithm")
+    log.info("  fuel_results.csv          fuel stop statistics per algorithm")
     log.info("  comparison_chart.png      travel time + speed bar charts")
     log.info("  convergence_<algorithm>_<scenario>.png  per-algorithm convergence charts")
     log.info("  comparison_map_*.html     route overlay maps (open in browser)")

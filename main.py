@@ -129,6 +129,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable leg-level parallelism in benchmark (more CPU cores, higher RAM usage)",
     )
+    parser.add_argument(
+        "--vehicle",
+        choices=["motor", "mobil"],
+        default=None,
+        metavar="VEHICLE",
+        help="Jenis kendaraan: motor (default) atau mobil",
+    )
     return parser
 
 
@@ -145,6 +152,8 @@ def main():
     if args.no_log_file:
         cfg.LOG_TO_FILE = False
     cfg.PARALLEL_LEGS = args.parallel_legs
+    if args.vehicle:
+        cfg.DEFAULT_VEHICLE = args.vehicle
 
     log = setup_logging(cfg)
     log.info("Surabaya Public Facility Routing Platform")

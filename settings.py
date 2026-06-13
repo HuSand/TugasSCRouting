@@ -76,6 +76,34 @@ class Settings:
         },
     }
 
+# ------------------------------------------------------------------
+    # Vehicle & Fuel Constraint
+    # ------------------------------------------------------------------
+
+    # Jenis kendaraan yang tersedia.
+    # range_km = tank_liters × fuel_efficiency_kpl
+    VEHICLE_TYPES = {
+        "motor": {
+            "label":               "Motor",
+            "tank_liters":         4.5,    # kapasitas tangki (liter)
+            "fuel_efficiency_kpl": 40.0,   # km per liter
+            "range_km":            150.0,  # jarak maksimum full tank
+        },
+        "mobil": {
+            "label":               "Mobil",
+            "tank_liters":         40.0,
+            "fuel_efficiency_kpl": 12.0,
+            "range_km":            375.0,
+        },
+    }
+
+    # Kendaraan default jika tidak di-set via CLI
+    DEFAULT_VEHICLE = "motor"
+
+    # Safety buffer: isi bensin kalau sisa range < threshold ini (km).
+    # Mencegah kehabisan bensin sebelum SPBU ditemukan.
+    FUEL_REFILL_THRESHOLD_KM = 10.0
+
     def __init__(self):
         self.DATA_DIR.mkdir(exist_ok=True)
         self.CACHE_DIR.mkdir(exist_ok=True)

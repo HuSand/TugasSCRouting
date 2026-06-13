@@ -16,6 +16,49 @@ import networkx as nx
 
 
 # ──────────────────────────────────────────────────────────────
+# Vehicle
+# ──────────────────────────────────────────────────────────────
+
+@dataclass
+class Vehicle:
+    """
+    Representasi kendaraan dengan constraint bahan bakar.
+
+    Attributes
+    ----------
+    vehicle_type        : str   — "motor" atau "mobil"
+    label               : str   — nama tampilan
+    tank_liters         : float — kapasitas tangki (liter)
+    fuel_efficiency_kpl : float — km per liter
+    range_km            : float — jarak maksimum dengan tangki penuh (km)
+    refill_threshold_km : float — isi bensin kalau sisa range < nilai ini (km)
+    """
+    vehicle_type:        str
+    label:               str
+    tank_liters:         float
+    fuel_efficiency_kpl: float
+    range_km:            float
+    refill_threshold_km: float = 20.0
+
+    @staticmethod
+    def from_settings(cfg, vehicle_type: str = None) -> "Vehicle":
+        """
+        Buat Vehicle dari settings.py.
+        Kalau vehicle_type tidak di-set, pakai cfg.DEFAULT_VEHICLE.
+        """
+        vtype = vehicle_type or cfg.DEFAULT_VEHICLE
+        info  = cfg.VEHICLE_TYPES[vtype]
+        return Vehicle(
+            vehicle_type        = vtype,
+            label               = info["label"],
+            tank_liters         = info["tank_liters"],
+            fuel_efficiency_kpl = info["fuel_efficiency_kpl"],
+            range_km            = info["range_km"],
+            refill_threshold_km = cfg.FUEL_REFILL_THRESHOLD_KM,
+        )
+    
+    
+# ──────────────────────────────────────────────────────────────
 # RouteResult
 # ──────────────────────────────────────────────────────────────
 

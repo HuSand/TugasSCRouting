@@ -225,22 +225,78 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .lb-score .sn{font-size:28px;font-weight:900;line-height:1;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.16)}
   .lb-score .sl{font-size:11px;font-weight:700;color:rgba(255,255,255,.92);letter-spacing:.85px;margin-top:6px;text-transform:uppercase}
 
-  /* Accordion */
+  /* Accordion (animated) */
   .accordion-trigger{background:#fff;border:1px solid var(--line);color:var(--ink);font-size:11.5px;font-weight:700;
     cursor:pointer;padding:8px 16px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;outline:none;transition:.12s;box-shadow:0 1px 2px rgba(0,0,0,.03)}
   .accordion-trigger:hover{background:#f8fafc;border-color:#cbd5e1}
-  .accordion-content{display:none;margin-top:14px;border-top:1.5px dashed var(--line);padding-top:14px}
-  .accordion-content.open{display:block}
-  .table-container{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.02)}
+  .accordion-trigger .caret{display:inline-block;transition:transform .3s ease}
+  .accordion-trigger.open .caret{transform:rotate(180deg)}
+  .accordion-content{max-height:0;opacity:0;overflow:hidden;
+    transition:max-height .38s cubic-bezier(.4,0,.2,1),opacity .25s ease,margin-top .3s ease,padding-top .3s ease;
+    margin-top:0;border-top:1.5px dashed transparent;padding-top:0}
+  .accordion-content.open{max-height:1600px;opacity:1;margin-top:14px;border-top-color:var(--line);padding-top:14px}
+  .table-container{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.02);max-height:340px;overflow-y:auto}
   .iter-table{width:100%;border-collapse:collapse;font-size:12px;text-align:center}
-  .iter-table th,.iter-table td{padding:10px 12px;border-bottom:1px solid var(--line)}
-  .iter-table th{background:#f8fafc;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px}
+  .iter-table th,.iter-table td{padding:9px 10px;border-bottom:1px solid var(--line)}
+  .iter-table th{background:#f8fafc;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0}
   .iter-table tr:last-child td{border-bottom:none}
   .iter-table tr.best-row{background:#f0fdf4;font-weight:700;color:#15803d}
   .iter-table tr.best-row td{border-top:1px solid #bbf7d0;border-bottom:1px solid #bbf7d0}
+  .iter-table .veh-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700}
+  .iter-table .veh-motor{background:#dbeafe;color:#1d4ed8}
+  .iter-table .veh-mobil{background:#fee2e2;color:#b91c1c}
+  .iter-table td.no{color:#b91c1c;font-weight:700}.iter-table td.yes{color:#15803d;font-weight:700}
   .acc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .dt-title{font-size:12px;font-weight:700;margin-bottom:8px;color:var(--ink)}
+  .acc-note{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.4}
+  .acc-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+  .acc-filters label{font-size:10.5px;color:var(--muted);font-weight:600}
+  .acc-filters select{font-size:11px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
   @media(max-width:700px){.acc-grid{grid-template-columns:1fr}}
+
+  /* Sub-card drilldown (klik metric pill -> timeline inline) */
+  .metric-pill{cursor:pointer;position:relative;transition:transform .12s,box-shadow .12s}
+  .metric-pill:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(15,23,42,.16)}
+  .metric-pill.sel{outline:2px solid rgba(255,255,255,.85);outline-offset:-3px}
+  .metric-pill .chev{margin-left:auto;font-size:10px;opacity:.85;transition:transform .25s ease}
+  .metric-pill.sel .chev{transform:rotate(180deg)}
+  .subcard-panel{max-height:0;opacity:0;overflow:hidden;
+    transition:max-height .38s cubic-bezier(.4,0,.2,1),opacity .25s ease,margin-top .3s ease;margin-top:0}
+  .subcard-panel.open{max-height:560px;opacity:1;margin-top:12px}
+  .subcard-inner{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}
+  .subcard-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+  .subcard-stats .s{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:11px;color:var(--muted);font-weight:600}
+  .subcard-stats .s b{display:block;font-size:15px;color:var(--ink);font-weight:800;margin-top:2px}
+  @media(max-width:700px){.subcard-inner{grid-template-columns:1fr}}
+
+  /* SVG chart tooltip + hover dots */
+  .svg-wrap{position:relative}
+  .chart-tip{position:absolute;pointer-events:none;background:rgba(15,23,42,.92);color:#fff;font-size:11px;
+    padding:5px 9px;border-radius:7px;white-space:nowrap;transform:translate(-50%,-130%);opacity:0;transition:opacity .12s;z-index:5;font-weight:600}
+  .svg-wrap circle.hot{cursor:pointer}
+  @keyframes drawline{to{stroke-dashoffset:0}}
+
+  /* Feasibility Roadmap */
+  .feas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+  .feas-card{border:1px solid var(--line);border-radius:16px;padding:18px;background:#f8fafc}
+  .feas-card.ok{border-color:#bbf7d0;background:linear-gradient(180deg,#f0fdf4,#fff)}
+  .feas-card.bad{border-color:#fecaca;background:linear-gradient(180deg,#fef2f2,#fff)}
+  .feas-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .feas-head .name{font-size:15px;font-weight:800;color:var(--ink)}
+  .feas-badge{font-size:10px;font-weight:800;padding:3px 9px;border-radius:6px;text-transform:uppercase;letter-spacing:.5px}
+  .feas-badge.ok{background:#16a34a;color:#fff}.feas-badge.bad{background:#dc2626;color:#fff}
+  .feas-narr{font-size:12.5px;color:var(--ink);line-height:1.6;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .feas-narr b{color:var(--accent)}
+  .feas-levers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .feas-lever{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}
+  .feas-lever .lk{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .feas-lever .lv{font-size:13px;font-weight:800;color:var(--ink);margin-top:3px}
+  .feas-lever.na .lv{color:#94a3b8;font-weight:600}
+  .feas-fleet{display:flex;gap:5px;flex-wrap:wrap}
+  .feas-fleet .fc{flex:1;min-width:44px;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 2px;background:#fff;font-size:11px}
+  .feas-fleet .fc.meets{background:#dcfce7;border-color:#86efac;color:#15803d;font-weight:700}
+  .feas-fleet .fc .fn{font-size:10px;color:var(--muted)}.feas-fleet .fc.meets .fn{color:#15803d}
+  @media(max-width:560px){.feas-levers{grid-template-columns:1fr}}
 
   /* Bars */
   .bars-vertical{display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
@@ -268,6 +324,10 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   table.cmp tr:last-child td{border-bottom:none}
   table.cmp tr:hover td{background:#f8fafc}
   table.cmp td.best{color:var(--hi);font-weight:700;background:#f0fdf4}
+  table.cmp th.sortable{cursor:pointer;user-select:none}
+  table.cmp th.sortable:hover{color:var(--ink)}
+  table.cmp th .arr{opacity:.4;font-size:9px;margin-left:3px}
+  table.cmp th.sorted .arr{opacity:1;color:var(--accent)}
 
   /* Chart selector */
   .chart-selector-wrapper{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-bottom:10px}
@@ -514,11 +574,19 @@ function renderRoute(){
     rLayers.push(L.marker(c, {icon:numIcon(i+1, CAT[lg.to_cat]||CAT['']), zIndexOffset:500})
       .addTo(mapRoute).bindPopup(`<b>#${i+1} ${lg.to}</b><br><small>${lg.to_cat||'-'}</small>`));
   }});
-  if (rStats) rStats.innerHTML = `
+  if (rStats) {
+    const avgSpeed = sh.travel_min > 0 ? (sh.distance_km / (sh.travel_min/60)) : 0;
+    const avgStop  = sh.visited_count > 0 ? ((sh.service_min||0) / sh.visited_count) : 0;
+    rStats.innerHTML = `
     <div class="stat good"><div class="k">Titik dikunjungi</div><div class="v">${sh.visited_count}</div></div>
     <div class="stat ${sh.feasible?'':'warn'}"><div class="k">Feasible</div><div class="v">${sh.feasible?'✓ Ya':'⚠ Tidak'}</div></div>
+    <div class="stat"><div class="k">Total jarak</div><div class="v">${(sh.distance_km||0).toFixed(1)}<small> km</small></div></div>
+    <div class="stat"><div class="k">Kecepatan rata-rata</div><div class="v">${avgSpeed.toFixed(1)}<small> km/jam</small></div></div>
+    <div class="stat"><div class="k">Rata-rata berhenti</div><div class="v">${avgStop.toFixed(1)}<small> mnt/titik</small></div></div>
     <div class="stat"><div class="k">Travel</div><div class="v">${sh.travel_min}<small> mnt</small></div></div>
+    <div class="stat"><div class="k">Service total</div><div class="v">${(sh.service_min||0).toFixed(0)}<small> mnt</small></div></div>
     <div class="stat"><div class="k">Total waktu</div><div class="v">${sh.total_min}<small> mnt</small></div></div>`;
+  }
   if (!legsDiv) return;
   legsDiv.innerHTML = '';
   legs.forEach((lg, i) => {
@@ -547,12 +615,13 @@ function renderAllVehicles(){
   const allRuns = runsFor(modelSel.value);
   const shiftNum = String(shiftSel.value);
   if (!allRuns.length) return;
-  const bounds = []; let totalVisited=0, feasOk=0, feasTotal=0;
+  const bounds = []; let totalVisited=0, feasOk=0, feasTotal=0, totalKm=0, totalTravelMin=0;
   allRuns.forEach(run => {
     const sh = run.shifts.find(s => String(s.shift) === shiftNum); if (!sh) return;
     const col = VEH_COLORS[run.vehicle] || '#64748b';
     const isMotor = run.vehicle === 'motor';
     totalVisited += sh.visited_count; feasTotal++;
+    totalKm += (sh.distance_km||0); totalTravelMin += (sh.travel_min||0);
     if (sh.feasible) feasOk++;
     if (sh.route_coords && sh.route_coords.length) {
       rLayers.push(L.polyline(sh.route_coords, {
@@ -572,9 +641,12 @@ function renderAllVehicles(){
   rLayers.push(L.marker(DATA.depot.coord, {icon:depotIcon(), zIndexOffset:1000})
     .addTo(mapRoute).bindPopup(`<b>DEPOT</b><br>${DATA.depot.label}`));
   if (bounds.length) mapRoute.fitBounds(L.latLngBounds(bounds).pad(.18));
+  const fleetAvgSpeed = totalTravelMin > 0 ? (totalKm / (totalTravelMin/60)) : 0;
   if (rStats) rStats.innerHTML = `
     <div class="stat good"><div class="k">Total dikunjungi</div><div class="v">${totalVisited}</div></div>
-    <div class="stat ${feasOk===feasTotal?'good':'warn'}"><div class="k">Feasible</div><div class="v">${feasOk}/${feasTotal}</div></div>` +
+    <div class="stat ${feasOk===feasTotal?'good':'warn'}"><div class="k">Feasible</div><div class="v">${feasOk}/${feasTotal}</div></div>
+    <div class="stat"><div class="k">Total jarak armada</div><div class="v">${totalKm.toFixed(1)}<small> km</small></div></div>
+    <div class="stat"><div class="k">Kecepatan rata-rata</div><div class="v">${fleetAvgSpeed.toFixed(1)}<small> km/jam</small></div></div>` +
     allRuns.map(run => {
       const sh = run.shifts.find(s => String(s.shift) === shiftNum);
       const col = VEH_COLORS[run.vehicle] || '#64748b';
@@ -637,12 +709,30 @@ if (shiftSel) shiftSel.onchange = renderRoute;
 fillVehicles(); fillShifts(); renderRoute();
 
 /* ── SVG line chart ── */
+/* cumulative max (best-so-far) — bikin kurva terbaca sebagai konvergensi */
+function bestSoFar(points){
+  let mx = -Infinity;
+  return points.map(p => { mx = Math.max(mx, p.y); return {x:p.x, y:mx, raw:p.y}; });
+}
+
 function lineChart(host, series, opts){
   if (!host) return;
   opts = opts || {};
   const W = opts.w||460, H = opts.h||230, P = {l:42, r:14, t:14, b:34};
-  const xs = series.flatMap(s => s.points.map(p => p.x));
-  const ys = series.flatMap(s => s.points.map(p => p.y));
+  const unit = opts.unit||'', anim = opts.anim !== false, xname = opts.xname||'x';
+  const visible = series.filter(s => s.points && s.points.length);
+  if (!visible.length){
+    let leg = '';
+    if (opts.legendAll) leg = '<div class="chart-legend">' + opts.legendAll.map(se => {
+      const hidden = opts.hidden && opts.hidden.has(se.name);
+      const click = opts.toggle ? ` style="cursor:pointer;opacity:${hidden?.4:1}" onclick="${opts.toggle}('${se.name.replace(/'/g,"")}')"` : '';
+      return `<span${click}><i style="background:${se.color}"></i>${se.name}</span>`;
+    }).join('') + '</div>';
+    host.innerHTML = '<div style="padding:24px;text-align:center;font-size:11px;color:var(--muted)">Tidak ada data</div>' + leg;
+    return;
+  }
+  const xs = visible.flatMap(s => s.points.map(p => p.x));
+  const ys = visible.flatMap(s => s.points.map(p => p.y));
   const xmin = opts.xmin != null ? opts.xmin : Math.min(0, ...xs);
   const xmax = opts.xmax != null ? opts.xmax : Math.max(1, ...xs);
   const ymax = opts.ymax != null ? opts.ymax : Math.max(1, ...ys) * 1.12, ymin = 0;
@@ -655,16 +745,38 @@ function lineChart(host, series, opts){
     s += `<text x="${P.l-6}" y="${py+3}" text-anchor="end" font-size="9" font-weight="500" fill="#94a3b8">${Math.round(v)}</text>`;
   }
   s += `<text x="${W/2}" y="${H-6}" text-anchor="middle" font-size="10" font-weight="600" fill="#64748b">${opts.xlabel||''}</text>`;
-  series.forEach(se => {
-    if (!se.points.length) return;
+  const dots = [];
+  visible.forEach((se, si) => {
     const d = se.points.map((p,i) => (i?'L':'M') + sx(p.x).toFixed(1) + ' ' + sy(p.y).toFixed(1)).join(' ');
-    s += `<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2.4" stroke-linejoin="round"/>`;
-    const last = se.points[se.points.length-1];
-    s += `<circle cx="${sx(last.x).toFixed(1)}" cy="${sy(last.y).toFixed(1)}" r="3" fill="${se.color}"/>`;
+    const len = se.points.length * 60 + 80;
+    const animStyle = anim ? `stroke-dasharray:${len};stroke-dashoffset:${len};animation:drawline .9s ${si*.12}s ease forwards` : '';
+    s += `<path d="${d}" fill="none" stroke="${se.color}" stroke-width="2.4" stroke-linejoin="round" style="${animStyle}"/>`;
+    se.points.forEach(p => {
+      const cx = sx(p.x).toFixed(1), cy = sy(p.y).toFixed(1);
+      const lbl = (se.name? se.name+' · ':'') + xname+' '+p.x+' → '+p.y+(unit?(' '+unit):'');
+      dots.push(`<circle class="hot" cx="${cx}" cy="${cy}" r="3.2" fill="${se.color}" data-tip="${lbl.replace(/"/g,'&quot;')}" data-cx="${cx}" data-cy="${cy}"></circle>`);
+    });
   });
+  s += dots.join('');
   s += '</svg>';
-  s += '<div class="chart-legend">' + series.map(se => `<span><i style="background:${se.color}"></i>${se.name}</span>`).join('') + '</div>';
+  s += '<div class="chart-tip"></div>';
+  const legSrc = opts.legendAll || visible;
+  s += '<div class="chart-legend">' + legSrc.map(se => {
+    const hidden = opts.hidden && opts.hidden.has(se.name);
+    const click = opts.toggle ? ` style="cursor:pointer;opacity:${hidden?.4:1}" onclick="${opts.toggle}('${se.name.replace(/'/g,"")}')"` : '';
+    return `<span${click}><i style="background:${se.color}"></i>${se.name}</span>`;
+  }).join('') + '</div>';
+  host.classList.add('svg-wrap');
   host.innerHTML = s;
+  const tip = host.querySelector('.chart-tip'), svg = host.querySelector('svg');
+  host.querySelectorAll('circle.hot').forEach(c => {
+    c.addEventListener('mouseenter', () => {
+      const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+      const px = +c.dataset.cx / vb.width * r.width, py = +c.dataset.cy / vb.height * r.height;
+      tip.textContent = c.dataset.tip; tip.style.left = px+'px'; tip.style.top = py+'px'; tip.style.opacity = 1;
+    });
+    c.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+  });
 }
 
 function bar(label, pct, value, color){
@@ -679,26 +791,111 @@ function switchMetricView(view){
   drawSelectedCharts();
 }
 
-function toggleAccordion(idx){
+function capV(v){ return v ? v.charAt(0).toUpperCase()+v.slice(1) : v; }
+
+let _cmpSort = {col:-1, asc:false};
+function sortCmpTable(col){
+  const tbl = document.getElementById('cmpTable'); if (!tbl) return;
+  const ths = tbl.querySelectorAll('thead th');
+  const kind = ths[col].dataset.kind;
+  const asc = (_cmpSort.col === col) ? !_cmpSort.asc : (kind==='min');
+  _cmpSort = {col, asc};
+  ths.forEach((th,i)=>{ th.classList.toggle('sorted', i===col);
+    const a=th.querySelector('.arr'); if(a) a.textContent = (i===col)?(asc?'▲':'▼'):'▼'; });
+  const tb = tbl.querySelector('tbody');
+  const rows = Array.from(tb.querySelectorAll('tr'));
+  rows.sort((r1,r2) => {
+    if (kind==='txt'){
+      const t1=r1.cells[col].textContent.trim(), t2=r2.cells[col].textContent.trim();
+      return asc? t1.localeCompare(t2) : t2.localeCompare(t1);
+    }
+    const v1=parseFloat(r1.cells[col].dataset.v)||0, v2=parseFloat(r2.cells[col].dataset.v)||0;
+    return asc? v1-v2 : v2-v1;
+  });
+  rows.forEach(r=>tb.appendChild(r));
+}
+
+/* Sub-card drilldown: timeline per iterasi (1..N) */
+const SUBCARD_META = {
+  runtime:     {key:'runtime_ms',  title:'⚡ Runtime per Iterasi', unit:'ms',        color:'#4338ca', dec:1},
+  throughput:  {key:'throughput',  title:'🛞 Throughput per Iterasi', unit:'titik/jam', color:'#2563eb', dec:2},
+  feasibility: {key:'feasible_pct',title:'✅ Feasible per Iterasi', unit:'%',         color:'#16a34a', dec:1},
+};
+function toggleSubcard(idx, metric, pill){
+  const panel = document.getElementById('subcard-'+idx);
+  const inner = document.getElementById('subcard-inner-'+idx);
+  const m = DATA.dashboard.models[idx]; if (!panel||!inner||!m) return;
+  const pills = pill.parentElement.querySelectorAll('.metric-pill');
+  const already = panel.classList.contains('open') && panel.dataset.metric === metric;
+  if (already){ panel.classList.remove('open'); pills.forEach(p=>p.classList.remove('sel')); panel.dataset.metric=''; return; }
+  pills.forEach(p=>p.classList.remove('sel')); pill.classList.add('sel');
+  panel.dataset.metric = metric;
+
+  if (metric === 'convergence'){
+    const keys = Object.keys(m.convergence_by_shift||{});
+    inner.innerHTML = `<div><div class="dt-title">🚀 Konvergensi Objektif (best-so-far)</div>
+      <div id="sc-conv-${idx}" style="min-height:180px"></div>
+      <div class="acc-note">Sumbu Y = titik dikunjungi pada shift; X = progres pencarian (%).</div></div>
+      <div><div class="dt-title">Ringkasan</div><div class="subcard-stats">
+        <div class="s">Konvergensi<b>${m.convergence_speed_pct}%</b></div>
+        <div class="s">Shift tersedia<b>${keys.length}</b></div>
+        <div class="s">Objektif final<b>${(m.convergence||[]).slice(-1)[0]?.visited ?? '—'}</b></div>
+      </div><div class="acc-note">"Konvergensi %" = seberapa dini (sisa progres) algoritma mencapai 95% kualitas solusi.</div></div>`;
+    const host = document.getElementById('sc-conv-'+idx);
+    const series = keys.map((k,i) => ({name:'Shift '+k, color: i? '#f59e0b': m.color,
+      points: bestSoFar((m.convergence_by_shift[k]||[]).map(c=>({x:c.progress,y:c.visited})))}));
+    lineChart(host, series, {xmin:0,xmax:100,xlabel:'Progres pencarian (%)',xname:'progres',unit:'titik',w:380,h:180});
+  } else {
+    const cfg = SUBCARD_META[metric];
+    const pts = (m.per_iter_detail||[]).map(d => ({x:d.iter, y:d[cfg.key]}));
+    const vals = pts.map(p=>p.y);
+    const mn = Math.min(...vals), mx = Math.max(...vals);
+    const mean = vals.reduce((a,b)=>a+b,0)/(vals.length||1);
+    inner.innerHTML = `<div><div class="dt-title">${cfg.title}</div>
+      <div id="sc-ts-${idx}" style="min-height:180px"></div></div>
+      <div><div class="dt-title">Ringkasan ${pts.length} iterasi</div>
+      <div class="subcard-stats">
+        <div class="s">Min<b>${mn.toFixed(cfg.dec)} ${cfg.unit}</b></div>
+        <div class="s">Rata-rata<b>${mean.toFixed(cfg.dec)} ${cfg.unit}</b></div>
+        <div class="s">Maks<b>${mx.toFixed(cfg.dec)} ${cfg.unit}</b></div>
+      </div>
+      <div class="table-container" style="max-height:200px"><table class="iter-table"><thead><tr><th>Iter</th><th>${cfg.unit}</th></tr></thead>
+      <tbody>${pts.map(p=>`<tr><td>#${p.x}</td><td><b>${(+p.y).toFixed(cfg.dec)}</b></td></tr>`).join('')}</tbody></table></div></div>`;
+    lineChart(document.getElementById('sc-ts-'+idx),
+      [{name:m.display_name, color:cfg.color, points:pts}],
+      {xmin:1, xmax: Math.max(2, pts.length), xlabel:'Iterasi', xname:'iter', unit:cfg.unit, w:380, h:180});
+  }
+  panel.classList.add('open');
+}
+
+function filterShiftTable(idx){
+  const veh = (document.getElementById('fveh-'+idx)||{}).value || '';
+  const sh  = (document.getElementById('fshift-'+idx)||{}).value || '';
+  const tbl = document.getElementById('shifttbl-'+idx); if (!tbl) return;
+  tbl.querySelectorAll('tbody tr').forEach(tr => {
+    const okV = !veh || tr.dataset.veh === veh;
+    const okS = !sh  || tr.dataset.shift === sh;
+    tr.style.display = (okV && okS) ? '' : 'none';
+  });
+}
+
+function drawConvShift(idx, key, btn){
+  const m = DATA.dashboard.models[idx];
+  const host = document.getElementById('conv-mini-'+idx); if (!m||!host) return;
+  if (btn){ btn.parentElement.querySelectorAll('.conv-shift-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
+  const frames = (m.convergence_by_shift||{})[key] || [];
+  if (!frames.length){ host.innerHTML = '<div style="padding:20px;text-align:center;font-size:11px;color:var(--muted)">Tidak ada data konvergensi shift ini</div>'; return; }
+  lineChart(host, [{name:'Shift '+key+' (best-so-far)', color:m.color,
+    points: bestSoFar(frames.map(c=>({x:c.progress,y:c.visited})))}],
+    {xmin:0, xmax:100, xlabel:'Progres pencarian (%)', xname:'progres', unit:'titik', w:340, h:170});
+}
+
+function toggleAccordion(idx, btn){
   const content = document.getElementById(`accordion-${idx}`);
   if (!content) return;
   const wasOpen = content.classList.contains('open');
   content.classList.toggle('open');
-  if (!wasOpen) {
-    const m = DATA.dashboard && DATA.dashboard.models[idx];
-    if (!m) return;
-    const el = document.getElementById('conv-mini-' + m.name);
-    if (el && !el.dataset.drawn) {
-      el.dataset.drawn = '1';
-      const pts = (m.convergence||[]).map(c => ({x: c.progress, y: c.visited}));
-      if (pts.length) {
-        lineChart(el, [{name: m.display_name, color: m.color, points: pts}],
-          {xmin:0, xmax:100, xlabel:'Progres pencarian (%)', w:320, h:160});
-      } else {
-        el.innerHTML = '<div style="padding:20px;text-align:center;font-size:11px;color:var(--muted)">Tidak ada data konvergensi</div>';
-      }
-    }
-  }
+  if (btn) btn.classList.toggle('open', !wasOpen);
 }
 
 /* ── TAB DASHBOARD ── */
@@ -712,29 +909,33 @@ function renderDashboard(){
   }
   const M = D.models, target = D.target;
 
-  /* ── Podium (real data from per_iter_detail) ── */
+  /* ── Podium: tiap entri = 1 kendaraan-run (iterasi × kendaraan, gabung 2 shift) ── */
   let allRuns = [];
   M.forEach(m => {
-    const perIter = m.per_iter_detail || [];
-    if (perIter.length) {
-      perIter.forEach(d => {
-        allRuns.push({ algo: m.display_name, icon: m.icon, color: m.color,
-          iter: d.iter, score: d.coverage, km: d.distance_km, runtime_ms: d.runtime_ms, feasible_pct: d.feasible_pct });
+    const psd = m.per_shift_detail || [];
+    if (psd.length) {
+      const agg = {};
+      psd.forEach(d => {
+        const k = d.iter + '|' + d.vehicle + '|' + d.unit;
+        (agg[k] = agg[k] || {iter:d.iter, vehicle:d.vehicle, unit:d.unit, score:0, km:0, rt:0, n:0, feas:0});
+        const a = agg[k]; a.score += d.visited; a.km += d.distance_km; a.rt += d.runtime_ms; a.n++; a.feas += d.feasible?1:0;
       });
+      Object.values(agg).forEach(a => allRuns.push({ algo:m.display_name, icon:m.icon, color:m.color,
+        iter:a.iter, vehicle:a.vehicle, unit:a.unit, score:a.score, km:+a.km.toFixed(2),
+        runtime_ms:+(a.rt/a.n).toFixed(1), feasible:(a.feas===a.n) }));
     } else {
-      m.per_iteration.forEach((val, i) => {
-        allRuns.push({ algo: m.display_name, icon: m.icon, color: m.color,
-          iter: i+1, score: val, km: 0, runtime_ms: parseFloat(m.avg_runtime_ms)||0, feasible_pct: m.feasible_pct });
-      });
+      (m.per_iter_detail||[]).forEach(d => allRuns.push({ algo:m.display_name, icon:m.icon, color:m.color,
+        iter:d.iter, vehicle:null, unit:null, score:d.coverage, km:d.distance_km, runtime_ms:d.runtime_ms, feasible:d.feasible_pct>=100 }));
     }
   });
   allRuns.sort((a,b) => (b.score - a.score) || (a.km - b.km));
   const top3 = allRuns.slice(0,3);
   const nextBest = allRuns.slice(3,10);
+  const vehId = it => it.vehicle ? `${capV(it.vehicle)} ${it.unit}` : '';
 
   let html = `<div class="card">
     <h2>👑 Global Best Iteration Podium</h2>
-    <div class="sub">Tiga eksekusi paling optimal</div>
+    <div class="sub">Kendaraan-run paling optimal (gabungan 2 shift, no-overlap)</div>
     <div class="podium-wrapper">`;
 
   const podiumRanks = [
@@ -748,10 +949,11 @@ function renderDashboard(){
       <span class="podium-badge">${badge}</span>
       <div class="podium-title">${item.icon} Iterasi #${item.iter}</div>
       <div class="podium-algo">${item.algo}</div>
+      ${item.vehicle ? `<div class="podium-veh"><span class="veh-tag veh-${item.vehicle}">${vehId(item)}</span> · ${item.feasible?'✓ feasible':'⚠ belum'}</div>` : ''}
       <div class="podium-opt-metrics">${item.score} <span>Titik Dikunjungi</span></div>
       ${item.km > 0 ? `<div class="podium-opt-metrics" style="font-size:15px;margin-top:4px">${item.km} <span>Kilometer</span></div>` : ''}
       <div class="podium-footer">
-        <div class="podium-stat"><span>Coverage</span>${item.score} titik</div>
+        <div class="podium-stat"><span>Kendaraan</span>${vehId(item)||'—'}</div>
         <div class="podium-stat"><span>Runtime</span>${item.runtime_ms} ms</div>
       </div>
     </div>`;
@@ -764,7 +966,7 @@ function renderDashboard(){
       html += `<div class="podium-item">
         <div class="rank-chip">#${idx+4}</div>
         <div class="algo-name">${item.icon} ${item.algo}</div>
-        <div class="algo-meta">Iterasi #${item.iter} · ${item.score} titik</div>
+        <div class="algo-meta">Iterasi #${item.iter}${item.vehicle?' · '+vehId(item):''} · ${item.score} titik</div>
         ${item.km > 0 ? `<div class="mini-stat"><span>Km</span><span>${item.km}</span></div>` : ''}
         <div class="mini-stat"><span>Runtime</span><span>${item.runtime_ms} ms</span></div>
       </div>`;
@@ -780,37 +982,28 @@ function renderDashboard(){
     <div class="lb">`;
 
   M.forEach((m, idx) => {
-    const perIter = m.per_iter_detail || [];
-    const maxVal = perIter.length ? Math.max(...perIter.map(d => d.coverage)) : Math.max(...m.per_iteration);
-    const bestIterNum = perIter.length
-      ? (perIter.find(d => d.coverage === maxVal) || {iter:1}).iter
-      : (m.per_iteration.indexOf(maxVal) + 1);
+    const cm = m.convergence_meta || {};
+    const bestIterNum = cm.iter || 1;
+    const bestTotal = cm.vehicle_total != null ? cm.vehicle_total
+      : ((m.per_iter_detail||[]).length ? Math.max(...m.per_iter_detail.map(d=>d.coverage)) : Math.max(...(m.per_iteration||[0])));
+    const bestId = cm.vehicle ? `${capV(cm.vehicle)} unit ${cm.unit}, iterasi #${cm.iter}` : `iterasi #${bestIterNum}`;
 
-    /* Accordion iter table rows using real per_iter_detail */
-    let iterRows = '';
-    if (perIter.length) {
-      perIter.forEach(d => {
-        const isBest = (d.coverage === maxVal);
-        iterRows += `<tr class="${isBest ? 'best-row' : ''}">
-          <td>Run #${d.iter}${isBest ? ' ⭐' : ''}</td>
-          <td><b>${d.coverage}</b> / ${target}</td>
-          <td>${d.distance_km > 0 ? d.distance_km + ' km' : '—'}</td>
-          <td>${d.runtime_ms} ms</td>
-          <td>${d.feasible_pct}%</td>
-        </tr>`;
-      });
-    } else {
-      m.per_iteration.forEach((val, i) => {
-        const isBest = (val === maxVal);
-        iterRows += `<tr class="${isBest ? 'best-row' : ''}">
-          <td>Run #${i+1}${isBest ? ' ⭐' : ''}</td>
-          <td><b>${val}</b> / ${target}</td>
-          <td>—</td>
-          <td>${m.avg_runtime_ms} ms</td>
-          <td>${m.feasible_pct}%</td>
-        </tr>`;
-      });
-    }
+    /* per-shift identity rows */
+    const psd = m.per_shift_detail || [];
+    let shiftRows = '';
+    psd.forEach(d => {
+      const isBest = cm.vehicle && d.iter===cm.iter && d.vehicle===cm.vehicle && d.unit===cm.unit;
+      shiftRows += `<tr class="${isBest?'best-row':''}" data-veh="${d.vehicle}" data-shift="${d.shift}">
+        <td>#${d.iter}${isBest?' ⭐':''}</td>
+        <td><span class="veh-tag veh-${d.vehicle}">${capV(d.vehicle)} ${d.unit}</span></td>
+        <td>Shift ${d.shift}</td>
+        <td><b>${d.visited}</b></td>
+        <td>${d.distance_km>0? d.distance_km+' km':'—'}</td>
+        <td>${d.runtime_ms} ms</td>
+        <td class="${d.feasible?'yes':'no'}">${d.feasible?'✓':'✗'}</td>
+      </tr>`;
+    });
+    const shiftKeys = Object.keys(m.convergence_by_shift||{});
 
     html += `<div class="lb-card pos-${idx}">
       <div class="lb-rank">${m.medal || ('#'+m.rank)}</div>
@@ -818,37 +1011,45 @@ function renderDashboard(){
       <div style="width:100%">
         <div class="lb-name">${m.display_name} <span class="tier tier-${m.tier}">TIER ${m.tier}</span></div>
         <div class="lb-sub">${m.tagline}</div>
-        <div class="best-run-banner">🎯 Best Run: Iterasi #${bestIterNum} — <strong>${maxVal} titik</strong></div>
+        <div class="best-run-banner">🎯 Best Run: ${bestId} — <strong>${bestTotal} titik</strong></div>
         <div class="lb-section">
           <div class="bars-vertical">
             ${bar('Coverage vs Target', m.coverage_avg/target*100, m.coverage_avg+' / '+target, m.color)}
           </div>
           <div class="metrics-grid">
-            <div class="metric-pill runtime"><span class="icon">⚡</span> Runtime: <b>${m.avg_runtime_ms} ms/shift</b></div>
-            <div class="metric-pill convergence"><span class="icon">🚀</span> Konvergensi: <b>${m.convergence_speed_pct}%</b></div>
-            <div class="metric-pill throughput"><span class="icon">🛞</span> Throughput: <b>${m.throughput} titik/jam</b></div>
-            <div class="metric-pill feasibility"><span class="icon">✅</span> Feasible: <b>${m.feasible_pct}%</b></div>
+            <div class="metric-pill runtime" onclick="toggleSubcard(${idx},'runtime',this)"><span class="icon">⚡</span> Runtime: <b>${m.avg_runtime_ms} ms/shift</b><span class="chev">▼</span></div>
+            <div class="metric-pill convergence" onclick="toggleSubcard(${idx},'convergence',this)"><span class="icon">🚀</span> Konvergensi: <b>${m.convergence_speed_pct}%</b><span class="chev">▼</span></div>
+            <div class="metric-pill throughput" onclick="toggleSubcard(${idx},'throughput',this)"><span class="icon">🛞</span> Throughput: <b>${m.throughput} titik/jam</b><span class="chev">▼</span></div>
+            <div class="metric-pill feasibility" onclick="toggleSubcard(${idx},'feasibility',this)"><span class="icon">✅</span> Feasible: <b>${m.feasible_pct}%</b><span class="chev">▼</span></div>
           </div>
+          <div class="subcard-panel" id="subcard-${idx}"><div class="subcard-inner" id="subcard-inner-${idx}"></div></div>
         </div>
         <div style="margin-top:14px">
-          <button class="accordion-trigger" onclick="toggleAccordion(${idx})">▼ Detail Per Iterasi &amp; Konvergensi</button>
+          <button class="accordion-trigger" onclick="toggleAccordion(${idx},this)"><span class="caret">▼</span> Detail Per Shift (identitas kendaraan &amp; iterasi)</button>
           <div class="accordion-content" id="accordion-${idx}">
-            <div class="acc-grid">
-              <div>
-                <div class="dt-title">⏱ History Runtime (${perIter.length || m.per_iteration.length} Iterasi)</div>
-                <div class="table-container">
-                  <table class="iter-table">
-                    <thead><tr>
-                      <th>Run</th><th>Titik</th><th>Jarak</th><th>Runtime</th><th>Feasible</th>
-                    </tr></thead>
-                    <tbody>${iterRows}</tbody>
-                  </table>
+            <div class="acc-single">
+              <div class="acc-head">
+                <div class="dt-title" style="margin:0">📋 Detail per Shift — ${psd.length} baris · ${m.per_iter_detail.length} iterasi</div>
+                <div class="acc-filters">
+                  <label>Kendaraan</label>
+                  <select id="fveh-${idx}" onchange="filterShiftTable(${idx})">
+                    <option value="">Semua</option><option value="motor">Motor</option><option value="mobil">Mobil</option>
+                  </select>
+                  <label>Shift</label>
+                  <select id="fshift-${idx}" onchange="filterShiftTable(${idx})">
+                    <option value="">Semua</option>${shiftKeys.map(k=>`<option value="${k}">Shift ${k}</option>`).join('')}
+                  </select>
                 </div>
               </div>
-              <div>
-                <div class="dt-title">📈 Kurva Konvergensi</div>
-                <div id="conv-mini-${m.name}" style="min-height:160px"></div>
+              <div class="table-container">
+                <table class="iter-table shift-table" id="shifttbl-${idx}">
+                  <thead><tr>
+                    <th>Iter</th><th>Kendaraan</th><th>Shift</th><th>Titik</th><th>Jarak</th><th>Runtime</th><th>Feasible</th>
+                  </tr></thead>
+                  <tbody>${shiftRows}</tbody>
+                </table>
               </div>
+              <div class="acc-note">⭐ = kendaraan-run terbaik (${bestId}, ${bestTotal} titik gabungan 2 shift). Kurva konvergensi ada di sub-card <b>🚀 Konvergensi</b> di atas.</div>
             </div>
           </div>
         </div>
@@ -863,8 +1064,45 @@ function renderDashboard(){
   });
   html += `</div></div>`;
 
+  /* ── Feasibility Roadmap (kondisi mencapai target) ── */
+  const F = D.feasibility;
+  let htmlFeas = '';
+  if (F && F.vehicles && F.vehicles.length) {
+    htmlFeas += `<div class="card">
+      <h2>🧭 Peta Jalan Feasibility</h2>
+      <div class="sub">Pada kondisi apa target <b>${F.target} titik/kendaraan</b> tercapai? Status = <b>hasil model terbaik</b> dari ${D.n_iterations} iterasi; lever = estimasi greedy (baseline ${F.base_shift_hours.toFixed(0)} jam/shift × ${F.n_shifts} shift, service ${F.base_service_min.toFixed(0)} mnt/titik).</div>
+      <div class="feas-grid">`;
+    F.vehicles.forEach(v => {
+      const ok = v.status === 'TERCAPAI';
+      const t = v.thresholds, bs = F.base_service_min, bh = F.base_shift_hours;
+      const lever = (label, val, none) => `<div class="feas-lever ${val==null?'na':''}"><div class="lk">${label}</div><div class="lv">${val==null?(none||'tak cukup'):val}</div></div>`;
+      const svcTxt  = t.service_min==null ? null : (t.service_min>=bs ? 'tak perlu' : '≤ '+t.service_min.toFixed(0)+' mnt');
+      const spdTxt  = t.speed_pct==null   ? null : (t.speed_pct<=0   ? 'tak perlu' : '+'+t.speed_pct.toFixed(0)+'%');
+      const hrsTxt  = t.shift_hours==null ? null : (t.shift_hours<=bh? 'tak perlu' : '≥ '+t.shift_hours.toFixed(0)+' jam');
+      htmlFeas += `<div class="feas-card ${ok?'ok':'bad'}">
+        <div class="feas-head">
+          <div class="name">${capV(v.vehicle)} — terbaik <b>${v.best_model}</b>/${v.target} titik</div>
+          <span class="feas-badge ${ok?'ok':'bad'}">${ok?'Target tercapai':'Belum tercapai'}</span>
+        </div>
+        <div class="feas-sub2">Hasil model: <b>${v.best_model}</b> titik · Estimasi greedy: ${v.baseline} titik</div>
+        <div class="feas-narr">${v.narrative}</div>
+        <div class="dt-title">Ubah SATU faktor agar capai target <span class="feas-tag">estimasi greedy</span></div>
+        <div class="feas-levers">
+          ${lever('Service', svcTxt)}
+          ${lever('Kecepatan', spdTxt)}
+          ${lever('Jam kerja', hrsTxt)}
+        </div>
+        <div class="dt-title">Coverage armada (titik unik vs jumlah kendaraan)</div>
+        <div class="feas-fleet">
+          ${(v.fleet||[]).map(f => `<div class="fc ${f.meets?'meets':''}"><div>${f.unique}</div><div class="fn">${f.n} unit${f.meets?' ✓':''}</div></div>`).join('')}
+        </div>
+      </div>`;
+    });
+    htmlFeas += `</div></div>`;
+  }
+
   /* ── Multi-metric charts ── */
-  html += `<div class="card">
+  let htmlMulti = `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px">
       <h2>📈 Analisis Multimetrik</h2>
       <div class="chart-selector-wrapper">
@@ -873,7 +1111,7 @@ function renderDashboard(){
         <button class="chart-btn ${activeMetricView==='time'?'active':''}" data-metric="time" onclick="switchMetricView('time')">⏱️ Waktu (Menit)</button>
       </div>
     </div>
-    <div class="sub">Kiri: kurva optimasi selama pencarian (%). Kanan: metrik per iterasi training.</div>
+    <div class="sub">Kiri: konvergensi objektif (titik/shift, best-so-far) selama pencarian. Kanan: metrik per iterasi training (1..N). Arahkan kursor ke titik untuk nilai detail.</div>
     <div class="charts-layout">
       <div class="chart-box">
         <div class="chart-title" id="titleConv">🎯 Kurva Konvergensi</div>
@@ -886,29 +1124,41 @@ function renderDashboard(){
     </div>
   </div>`;
 
-  /* ── Comparison table ── */
-  html += `<div class="card">
+  /* ── Comparison table (sortable) ── */
+  const cmpCols = [
+    {label:'Model', key:'display_name', kind:'txt'},
+    {label:'Coverage', key:'coverage_avg', kind:'max'},
+    {label:'Rekor', key:'coverage_best', kind:'max'},
+    {label:'Target %', key:'target_attainment_pct', kind:'plain', suf:'%'},
+    {label:'Konsistensi', key:'consistency_pct', kind:'max', suf:'%'},
+    {label:'Success', key:'success_rate_pct', kind:'plain', suf:'%'},
+    {label:'Titik/jam', key:'throughput', kind:'max'},
+    {label:'Runtime', key:'avg_runtime_ms', kind:'min', suf:' ms'},
+    {label:'Feasible', key:'feasible_pct', kind:'plain', suf:'%'},
+    {label:'Skor', key:'overall_score', kind:'max', bold:true},
+  ];
+  let htmlCmp = `<div class="card">
     <h2>📋 Tabel Perbandingan Lengkap</h2>
-    <div class="sub">Semua indikator objektif per model</div>
-    <div class="table-card"><table class="cmp"><thead><tr>
-      <th>Model</th><th>Coverage</th><th>Rekor</th><th>Target %</th><th>Konsistensi</th>
-      <th>Success</th><th>Titik/jam</th><th>Runtime</th><th>Feasible</th><th>Skor</th>
-    </tr></thead><tbody>`;
+    <div class="sub">Semua indikator objektif per model — klik header untuk mengurutkan</div>
+    <div class="table-card"><table class="cmp" id="cmpTable"><thead><tr>` +
+    cmpCols.map((c,i) => `<th class="sortable" onclick="sortCmpTable(${i})" data-key="${c.key}" data-kind="${c.kind}">${c.label}<span class="arr">▼</span></th>`).join('') +
+    `</tr></thead><tbody>`;
   const bestOf = k => Math.max(...M.map(m => m[k]));
   const minOf  = k => Math.min(...M.map(m => m[k]));
-  M.forEach(m => { html += `<tr>
-    <td><b>${m.icon} ${m.display_name}</b></td>
-    <td class="${m.coverage_avg===bestOf('coverage_avg')?'best':''}">${m.coverage_avg}</td>
-    <td class="${m.coverage_best===bestOf('coverage_best')?'best':''}">${m.coverage_best}</td>
-    <td>${m.target_attainment_pct}%</td>
-    <td class="${m.consistency_pct===bestOf('consistency_pct')?'best':''}">${m.consistency_pct}%</td>
-    <td>${m.success_rate_pct}%</td>
-    <td class="${m.throughput===bestOf('throughput')?'best':''}">${m.throughput}</td>
-    <td class="${m.avg_runtime_ms===minOf('avg_runtime_ms')?'best':''}">${m.avg_runtime_ms} ms</td>
-    <td>${m.feasible_pct}%</td>
-    <td class="${m.overall_score===bestOf('overall_score')?'best':''}"><b>${m.overall_score}</b></td>
-  </tr>`; });
-  html += `</tbody></table></div></div>`;
+  const fmtCell = (m, c) => {
+    const v = m[c.key];
+    let cls = '';
+    if (c.kind==='max' && v===bestOf(c.key)) cls='best';
+    if (c.kind==='min' && v===minOf(c.key)) cls='best';
+    if (c.kind==='txt') return `<td><b>${m.icon} ${m.display_name}</b></td>`;
+    const inner = (c.bold? `<b>${v}${c.suf||''}</b>` : `${v}${c.suf||''}`);
+    return `<td class="${cls}" data-v="${v}">${inner}</td>`;
+  };
+  M.forEach(m => { htmlCmp += '<tr>' + cmpCols.map(c => fmtCell(m,c)).join('') + '</tr>'; });
+  htmlCmp += `</tbody></table></div></div>`;
+
+  /* ── Susun urutan kartu: Leaderboard → Tabel Perbandingan → Multimetrik → Feasibility ── */
+  html += htmlCmp + htmlMulti + htmlFeas;
 
   /* ── Insights (dynamic from D.insights) ── */
   const insClasses = ['active-accent','active-success','active-warning'];
@@ -930,6 +1180,12 @@ function renderDashboard(){
   drawSelectedCharts();
 }
 
+const hiddenModels = new Set();
+function toggleSeries(name){
+  if (hiddenModels.has(name)) hiddenModels.delete(name); else hiddenModels.add(name);
+  drawSelectedCharts();
+}
+
 function drawSelectedCharts(){
   const D = DATA.dashboard; if (!D) return;
   const M = D.models;
@@ -938,6 +1194,10 @@ function drawSelectedCharts(){
   const titleConv = document.getElementById('titleConv');
   const titleIter = document.getElementById('titleIter');
   if (!hostConv || !hostIter) return;
+  const ALL = M.map(m => ({name: m.display_name, color: m.color}));
+  const LC = (host, series, opts) => lineChart(host,
+    series.filter(s => !hiddenModels.has(s.name)),
+    Object.assign({legendAll: ALL, hidden: hiddenModels, toggle: 'toggleSeries'}, opts));
 
   if (activeMetricView === 'distance') {
     if (titleConv) titleConv.innerHTML = '🛣️ Kurva Travel Time selama Pencarian (mnt)';
@@ -948,7 +1208,7 @@ function drawSelectedCharts(){
       .map(m => ({ name: m.display_name, color: m.color,
         points: m.convergence.map(c => ({x: c.progress, y: c.travel_min||0})) }));
     if (convSeries.length) {
-      lineChart(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)'});
+      LC(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:'mnt'});
     } else {
       hostConv.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data travel_min tidak tersedia</div>';
     }
@@ -958,7 +1218,7 @@ function drawSelectedCharts(){
       .map(m => ({ name: m.display_name, color: m.color,
         points: m.per_iter_detail.map(d => ({x: d.iter, y: d.distance_km})) }));
     if (iterSeries.length) {
-      lineChart(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi'});
+      LC(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'km'});
     } else {
       hostIter.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data jarak tidak tersedia</div>';
     }
@@ -972,7 +1232,7 @@ function drawSelectedCharts(){
       .map(m => ({ name: m.display_name, color: m.color,
         points: m.convergence.map(c => ({x: c.progress, y: c.total_min||0})) }));
     if (convSeries.length) {
-      lineChart(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)'});
+      LC(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:'mnt'});
     } else {
       hostConv.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data total_min tidak tersedia</div>';
     }
@@ -982,32 +1242,32 @@ function drawSelectedCharts(){
       .map(m => ({ name: m.display_name, color: m.color,
         points: m.per_iter_detail.map(d => ({x: d.iter, y: d.runtime_ms})) }));
     if (iterSeries.length) {
-      lineChart(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi'});
+      LC(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'ms'});
     } else {
-      lineChart(hostIter,
+      LC(hostIter,
         M.map(m => ({ name: m.display_name, color: m.color,
           points: m.per_iteration.map((v,i) => ({x: i+1, y: parseFloat(m.avg_runtime_ms)||0})) })),
-        {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi'});
+        {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'ms'});
     }
 
   } else {
-    /* Coverage (default) — real data */
-    if (titleConv) titleConv.innerHTML = '🎯 Kurva Konvergensi Coverage (%)';
+    /* Coverage (default) — real data; objektif = titik/shift (best-so-far) */
+    if (titleConv) titleConv.innerHTML = '🎯 Konvergensi Objektif (titik/shift)';
     if (titleIter) titleIter.innerHTML = '🎯 Coverage per Iterasi (titik)';
 
-    lineChart(hostConv,
+    LC(hostConv,
       M.filter(m => m.convergence && m.convergence.length).map(m => ({
         name: m.display_name, color: m.color,
-        points: m.convergence.map(c => ({x: c.progress, y: c.visited}))
-      })), {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)'});
+        points: bestSoFar(m.convergence.map(c => ({x: c.progress, y: c.visited})))
+      })), {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:'titik'});
 
     const iterSeries = M.filter(m => (m.per_iter_detail||[]).length)
       .map(m => ({ name: m.display_name, color: m.color,
         points: m.per_iter_detail.map(d => ({x: d.iter, y: d.coverage})) }));
-    lineChart(hostIter,
+    LC(hostIter,
       iterSeries.length ? iterSeries : M.map(m => ({ name: m.display_name, color: m.color,
         points: m.per_iteration.map((v,i) => ({x: i+1, y: v})) })),
-      {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi'});
+      {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'titik'});
   }
 }
 

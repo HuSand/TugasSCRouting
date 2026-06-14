@@ -281,20 +281,16 @@ def run_multi_vehicle_training(cfg):
     log.info(f"\nTRAINING SUMMARY (titik per kendaraan, 2 shift)\n{'='*60}\n"
              f"{summary.to_string(index=False)}")
 
-    # ── Training log JSON (untuk viewer) ─────────────────────
-    _write_training_log(cfg, best_run, depot, coords, labels, node_cat, df)
+    # ── Analisis feasibility (kondisi mencapai target) ───────
+    # Selalu dihitung — dipakai untuk dashboard (Feasibility Roadmap) & txt report.
+    from src.routing.insight import (compute_feasibility_conditions,
+                                     generate_insight_report)
+    feasibility = compute_feasibility_conditions(cfg, base_problems, summary)
+    generate_insight_report(cfg, base_problems, summary, data=feasibility)
 
-    # ── Insight report bila ada yang < target ────────────────
-    target = cfg.MIN_POINTS_TARGET
-    failing = summary[summary["best_total"] < target]
-    if not failing.empty:
-        log.info(f"\n{len(failing)} (model×kendaraan) gagal capai target {target} titik "
-                 f"→ generate insight report...")
-        from src.routing.insight import generate_insight_report
-        generate_insight_report(cfg, G, base_problems, summary, depot,
-                                pool_nodes, labels, coords)
-    else:
-        log.info(f"\nSemua kendaraan capai target {target} titik. Insight report dilewati.")
+    # ── Training log JSON (untuk viewer) ─────────────────────
+    _write_training_log(cfg, best_run, depot, coords, labels, node_cat, df,
+                        feasibility)
 
     # ── Route viewer ─────────────────────────────────────────
     from src.routing.route_viewer import build_route_viewer
@@ -321,7 +317,9 @@ def _shift_payload(res) -> dict:
         "visited_stops": m.get("visited_stops", []),
         "visited_nodes": m.get("visited_nodes", []),
         "travel_min":    round(m.get("travel_time_s", 0) / 60, 1),
+        "service_min":   round(m.get("service_s_total", 0) / 60, 1),
         "total_min":     round(m.get("total_time_s", 0) / 60, 1),
+        "distance_km":   round((res.total_distance_m or 0) / 1000, 2),
         "feasible":      m.get("feasible", res.found),
         "route_coords":  m.get("route_coords", []),
         "legs":          m.get("legs", []),
@@ -355,8 +353,12 @@ def _summarise(df: pd.DataFrame, cfg) -> pd.DataFrame:
 
 
 def _write_training_log(cfg, best_run: dict, depot: int, coords: dict,
-                        labels: dict, node_cat: dict, df: pd.DataFrame):
+                        labels: dict, node_cat: dict, df: pd.DataFrame,
+                        feasibility: dict | None = None):
     """Tulis training_log.json: rute, pool, dan dashboard performa untuk viewer."""
+    dashboard = _build_dashboard(cfg, df, best_run)
+    if feasibility is not None:
+        dashboard["feasibility"] = feasibility
     payload = {
         "generated":   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "depot":       {"node": depot, "label": labels.get(depot, "DEPOT"),
@@ -372,7 +374,7 @@ def _write_training_log(cfg, best_run: dict, depot: int, coords: dict,
             for n in coords if n != depot
         ],
         "runs":        [],
-        "dashboard":   _build_dashboard(cfg, df, best_run),
+        "dashboard":   dashboard,
     }
     for (model, vtype, unit), info in sorted(best_run.items()):
         payload["runs"].append({
@@ -434,39 +436,68 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
                        .agg(visited=("visited_count", "sum"),
                             runtime_ms=("computation_ms", "mean"),
                             distance_km=("distance_km", "sum"),
+                            total_min=("total_min", "sum"),
                             feasible=("feasible", "mean"))
                        .reset_index())
         per_iter_detail = []
         for _it in range(1, n_iter + 1):
             _g = _sub_veh[_sub_veh["iteration"] == _it]
             if not _g.empty:
+                _cov = float(_g["visited"].mean())
+                _tmin = float(_g["total_min"].mean())
                 per_iter_detail.append({
                     "iter":        _it,
-                    "coverage":    round(float(_g["visited"].mean()), 1),
+                    "coverage":    round(_cov, 1),
                     "runtime_ms":  round(float(_g["runtime_ms"].mean()), 1),
                     "distance_km": round(float(_g["distance_km"].mean()), 2),
+                    "throughput":  round(_cov / (_tmin / 60), 2) if _tmin > 0 else 0.0,
                     "feasible_pct": round(float(_g["feasible"].mean() * 100), 1),
                 })
             else:
                 per_iter_detail.append({
                     "iter": _it, "coverage": 0.0, "runtime_ms": 0.0,
-                    "distance_km": 0.0, "feasible_pct": 0.0,
+                    "distance_km": 0.0, "throughput": 0.0, "feasible_pct": 0.0,
                 })
 
-        # Konvergensi: ambil best vehicle-run model ini, pakai gen_history shift-1
-        conv, best_total = [], -1
+        # Per-shift detail granular (identitas: kendaraan/unit/shift per iterasi)
+        per_shift_detail = [
+            {"iter":        int(r["iteration"]),
+             "vehicle":     str(r["vehicle"]),
+             "unit":        int(r["vehicle_unit"]),
+             "shift":       int(r["shift"]),
+             "visited":     int(r["visited_count"]),
+             "travel_min":  round(float(r["travel_min"]), 1),
+             "total_min":   round(float(r["total_min"]), 1),
+             "distance_km": round(float(r["distance_km"]), 2),
+             "runtime_ms":  round(float(r["computation_ms"]), 1),
+             "feasible":    bool(r["feasible"])}
+            for _, r in sub.sort_values(
+                ["iteration", "vehicle", "vehicle_unit", "shift"]).iterrows()
+        ]
+
+        # Konvergensi: best vehicle-run model ini, gen_history SEMUA shift + identitas
+        conv_by_shift, conv_meta, best_total = {}, {}, -1
         for (m, vt, u), info in best_run.items():
             if m == name and info["total"] > best_total:
                 best_total = info["total"]
-                gh = (info["shifts"][0].get("gen_history", []) if info["shifts"] else [])
-                conv = [{"x": fr["gen"], "visited": fr["visited"],
-                         "total_min": fr.get("total_min", 0),
-                         "travel_min": fr.get("travel_min", 0)} for fr in gh]
+                conv_meta = {"vehicle": vt, "unit": int(u), "iter": int(info["iter"]),
+                             "vehicle_total": int(info["total"])}
+                conv_by_shift = {}
+                for _sh in info.get("shifts", []):
+                    frames = [{"x": fr["gen"], "visited": fr["visited"],
+                               "total_min": fr.get("total_min", 0),
+                               "travel_min": fr.get("travel_min", 0)}
+                              for fr in _sh.get("gen_history", [])]
+                    if not frames:
+                        continue
+                    gmax = frames[-1]["x"] or 1
+                    for c in frames:
+                        c["progress"] = round(c["x"] / gmax * 100, 1)
+                    conv_by_shift[str(_sh.get("shift"))] = frames
+        # legacy/headline curve = shift-1 (atau shift pertama yang punya data)
+        conv = conv_by_shift.get("1") or next(iter(conv_by_shift.values()), [])
         conv_speed = 0.0
         if conv:
-            gmax = conv[-1]["x"] or 1
-            for c in conv:
-                c["progress"] = round(c["x"] / gmax * 100, 1)
             final = conv[-1]["visited"] or 1
             gen95 = next((c["progress"] for c in conv if c["visited"] >= 0.95 * final), 100)
             conv_speed = round(100 - gen95, 1)
@@ -492,7 +523,10 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
             "convergence_speed_pct": conv_speed,
             "per_iteration":         per_iter,
             "per_iter_detail":       per_iter_detail,
+            "per_shift_detail":      per_shift_detail,
             "convergence":           conv,
+            "convergence_by_shift":  conv_by_shift,
+            "convergence_meta":      conv_meta,
         })
 
     # Skor komposit (objektif utama = coverage, dibobot terbesar)

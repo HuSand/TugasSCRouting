@@ -2902,6 +2902,21 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
     OR_OPT_MAX_LEN  = 300    # batas path length untuk Or-opt
                              # path > 300 node di-skip (terlalu mahal)
 
+    OR_OPT_PASSES   = 2      # NEW — was an unbounded `while improved` loop.
+                             # Each pass is at most one improving move with
+                             # cached edge costs; 2 passes is enough to clean
+                             # up the obvious detours without O(n^2) blowup.
+ 
+    N_STAGNATION    = 6      # NEW — stop the colony early if best_cost hasn't
+                             # improved for this many consecutive iterations.
+                             # Most point-to-point routes converge in 6-10
+                             # iterations; the remaining 15-19 of the original
+                             # 25 were pure wasted ant-walks.
+ 
+    ANCHOR_COUNT    = 12     # NEW — number of sampled anchor nodes along the
+                             # Dijkstra path used to seed subgraph expansion,
+                             # instead of expanding from EVERY path node.
+
     RANDOM_SEED     = 42
 
     # ──────────────────────────────────────────────────────────────────
@@ -2915,10 +2930,17 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
     # ══════════════════════════════════════════════════════════════════
 
     def _build_subgraph(self, G, dijkstra_path: list) -> set:
-        relevant = set(dijkstra_path)
-        frontier = set(dijkstra_path)
+        path_len = len(dijkstra_path)
+    
+        stride  = max(1, path_len // self.ANCHOR_COUNT)
+        anchors = set(dijkstra_path[0::stride])
+        anchors.add(dijkstra_path[-1])
 
-        for _ in range(self.BFS_RADIUS):
+        radius = self.BFS_RADIUS if path_len <= 80 else 1
+ 
+        relevant = set(anchors)
+        frontier = set(anchors)
+        for _ in range(radius):
             next_frontier = set()
             for node in frontier:
                 for nb in G.successors(node):
@@ -2931,8 +2953,10 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                         next_frontier.add(nb)
             frontier = next_frontier
             if not frontier:
-                break  # sudah tidak ada node baru
-
+                break
+    
+        # Safety floor: the full Dijkstra path must always be routable.
+        relevant.update(dijkstra_path)
         return relevant
 
     # ══════════════════════════════════════════════════════════════════
@@ -3168,81 +3192,72 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
         return min(float(d.get("travel_time", 9999)) for d in ed.values())
 
     def _or_opt(self, G, path: list) -> list:
+        """
+        Or-opt relocate pass, capped at OR_OPT_PASSES (default 2).
+    
+        Old behaviour: `while improved` with a full restart from seg_len=1
+        on every single improving move, and FOUR fresh G.get_edge_data()
+        calls per (i, j, seg_len) combination — O(n^2) per restart, with an
+        unbounded number of restarts on long paths.
+    
+        New behaviour: each pass precomputes the path's consecutive edge
+        costs ONCE into an array (`edge_cost`), so cost_out / cost_remove_j
+        become O(1) array lookups instead of fresh graph queries. At most
+        ONE improving move is applied per pass, then the pass ends (the
+        edge_cost array is now stale and must be rebuilt). If a whole pass
+        finds nothing, we stop early — most paths converge in 1-2 passes.
+        """
         if len(path) < 5 or len(path) > self.OR_OPT_MAX_LEN:
             return path
-
-        best      = path[:]
-        best_cost = self._path_cost(G, best)
-        improved  = True
-
-        while improved:
-            improved = False
+    
+        best = path[:]
+    
+        for _ in range(self.OR_OPT_PASSES):
             n = len(best)
-
+            edge_cost = [self._edge_cost(G, best[k], best[k + 1]) for k in range(n - 1)]
+            best_cost = sum(edge_cost)
+            improved_this_pass = False
+    
             for seg_len in range(1, self.OR_OPT_MAX_SEG + 1):
-                if improved:
-                    break  # restart dari seg_len=1 jika ada perbaikan
-
                 for i in range(1, n - seg_len):
-                    # Segmen yang akan dipindah: best[i : i+seg_len]
-                    seg = best[i : i + seg_len]
-                    before_seg = best[i - 1]        # node sebelum segmen
-                    after_seg  = best[i + seg_len]  # node setelah segmen (bisa out-of-range)
-
                     if i + seg_len >= n:
-                        continue   # segmen di ujung, tidak bisa dipindah
-
-                    # Biaya edge yang hilang ketika segmen dilepas:
-                    #   before_seg → seg[0]   (edge masuk segmen)
-                    #   seg[-1]    → after_seg (edge keluar segmen)
-                    # Biaya edge penghubung baru (before_seg → after_seg):
-                    cost_remove = (
-                        self._edge_cost(G, before_seg, seg[0])
-                        + self._edge_cost(G, seg[-1], after_seg)
-                    )
-                    cost_bridge = self._edge_cost(G, before_seg, after_seg)
-                    saving_remove = cost_remove - cost_bridge
-
-                    # Coba sisipkan segmen di setiap posisi j lain
+                        continue
+                    seg = best[i:i + seg_len]
+                    before, after = best[i - 1], best[i + seg_len]
+    
+                    cost_out    = edge_cost[i - 1] + edge_cost[i + seg_len - 1]
+                    cost_bridge = self._edge_cost(G, before, after)
+                    saving      = cost_out - cost_bridge
+    
                     for j in range(1, n - seg_len):
-                        if j == i or (i <= j < i + seg_len):
-                            continue   # posisi yang sama atau tumpang tindih
-
-                        insert_before = best[j - 1]
-                        insert_after  = best[j]
-
-                        # Biaya edge yang hilang di posisi j:
-                        cost_remove_j = self._edge_cost(G, insert_before, insert_after)
-
-                        # Biaya edge baru di posisi j setelah sisip:
+                        if i <= j <= i + seg_len:
+                            continue
+                        insert_before, insert_after = best[j - 1], best[j]
+                        cost_remove_j = edge_cost[j - 1]
                         cost_insert_j = (
                             self._edge_cost(G, insert_before, seg[0])
                             + self._edge_cost(G, seg[-1], insert_after)
                         )
-
-                        # Perbaikan total = penghematan melepas segmen
-                        #                  - biaya menyisipkan segmen
-                        delta = saving_remove - (cost_insert_j - cost_remove_j)
-
+                        delta = saving - (cost_insert_j - cost_remove_j)
+    
                         if delta > 1e-9:
-                            # Lakukan relocate move
-                            # Bangun path baru:
-                            #   path tanpa segmen, lalu sisipkan segmen di j
-                            path_without = best[:i] + best[i + seg_len:]
-                            # Sesuaikan indeks j karena path sudah berkurang
+                            without_seg = best[:i] + best[i + seg_len:]
                             j_adj = j if j < i else j - seg_len
-                            new_path = path_without[:j_adj] + seg + path_without[j_adj:]
-
+                            new_path = without_seg[:j_adj] + seg + without_seg[j_adj:]
                             new_cost = self._path_cost(G, new_path)
                             if new_cost < best_cost - 1e-9:
-                                best      = new_path
+                                best = new_path
                                 best_cost = new_cost
-                                improved  = True
-                                break   # restart inner loop
-
-                    if improved:
-                        break   # restart outer loop
-
+                                improved_this_pass = True
+                                break
+                    if improved_this_pass:
+                        break
+                if improved_this_pass:
+                    break
+    
+            if not improved_this_pass:
+                break
+    
         return best
 
     # ══════════════════════════════════════════════════════════════════
@@ -3250,48 +3265,53 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
     # ══════════════════════════════════════════════════════════════════
 
     def _run_aco(self, G, source: int, target: int) -> list:
+        """
+        Same MMAS + rank-deposit colony loop, with two additions:
+    
+        (1) EARLY STOP — if best_cost hasn't improved for N_STAGNATION
+            consecutive iterations, stop the colony. Or-opt still runs
+            on whatever best_path was found.
+    
+        (2) SELECTIVE HISTORY — _ga_path_distance() and _route_streets()
+            are O(path_length) with a min() over parallel edges each
+            hop. Recomputing them every iteration when best_path hasn't
+            changed is pure waste. Now they're only recomputed when
+            best_cost actually improves; otherwise the previous frame is
+            reused with an updated `gen` number.
+        """
         rng = random.Random(self.RANDOM_SEED)
-
-        # ── Step 1: Dijkstra warmup ──────────────────────────────────
+    
         try:
-            dijkstra_path = nx.shortest_path(
-                G, source, target, weight="travel_time"
-            )
+            dijkstra_path = nx.shortest_path(G, source, target, weight="travel_time")
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             raise nx.NetworkXNoPath(
                 f"ACO-Elite Pro: tidak ada jalur dari {source} ke {target}"
             )
-
+    
         dijkstra_cost = self._path_cost(G, dijkstra_path)
-
-        # ── Step 2: Subgraph & candidate lists ──────────────────────
+    
         subgraph_nodes  = self._build_subgraph(G, dijkstra_path)
         candidate_lists = self._build_candidate_lists(G, subgraph_nodes)
         max_steps       = min(len(subgraph_nodes) * 2, 2000)
-
-        # ── Step 3: Inisialisasi MMAS bounds awal ───────────────────
+    
         tau_max, tau_min = self._compute_mmas_bounds(dijkstra_cost, len(subgraph_nodes))
-
-        # ── Step 4: Inisialisasi feromon ────────────────────────────
-        # Semua edge di subgraph mulai dari TAU_INIT
-        # Jalur Dijkstra mendapat warmup deposit tambahan agar semut
-        # punya "starting signal" yang baik sejak awal
+    
         pheromone: dict = {}
         warmup_deposit = self.Q / dijkstra_cost if dijkstra_cost > 0 else 1.0
         for u, v in zip(dijkstra_path[:-1], dijkstra_path[1:]):
             init_val = min(self.TAU_INIT + warmup_deposit, tau_max)
             pheromone[(u, v)] = init_val
-
+    
         best_path = dijkstra_path[:]
         best_cost = dijkstra_cost
-
-        # ── Step 5: Loop iterasi koloni ──────────────────────────────
-        gen_history = []
+    
+        gen_history: list = []
+        last_frame  = None
+        no_improve  = 0
+    
         for iteration in range(self.N_ITERATIONS):
-
-            # (a) Setiap semut bangun path
-            iteration_results: list[tuple[float, list]] = []
-
+            iteration_results: list = []
+    
             for _ in range(self.N_ANTS):
                 path = self._build_ant_path(
                     G, source, target,
@@ -3303,29 +3323,50 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                 cost = self._path_cost(G, path)
                 if cost < float("inf"):
                     iteration_results.append((cost, path))
-
-            # (b) Urutkan hasil iterasi ascending (terbaik pertama)
+    
             iteration_results.sort(key=lambda x: x[0])
-
-            # (c) Update global best
+    
+            changed = False
             if iteration_results:
                 iter_best_cost, iter_best_path = iteration_results[0]
-                if iter_best_cost < best_cost:
+                if iter_best_cost < best_cost - 1e-9:
                     best_cost = iter_best_cost
                     best_path = iter_best_path[:]
-
-            # (d) Update MMAS bounds berdasarkan best_cost terkini
-            tau_max, tau_min = self._compute_mmas_bounds(
-                best_cost, len(subgraph_nodes)
-            )
-
-            # (e) Evaporasi + clamp ke [tau_min, tau_max]
+                    changed = True
+    
+            tau_max, tau_min = self._compute_mmas_bounds(best_cost, len(subgraph_nodes))
             self._evaporate_and_clip(pheromone, tau_min, tau_max)
-
-            # (f) Rank-based deposit dari top-W semut iterasi ini
             self._deposit_rank_based(pheromone, tau_max, iteration_results)
-
-            # (g) Record generation history
+    
+            # ── selective history recording ────────────────────────────
+            if changed or last_frame is None:
+                coords = []
+                for n in best_path:
+                    node = G.nodes.get(n)
+                    if node:
+                        coords.append([round(float(node["y"]), 5),
+                                        round(float(node["x"]), 5)])
+                last_frame = {
+                    "gen":     iteration + 1,
+                    "min":     round(best_cost / 60, 3),
+                    "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),
+                    "coords":  coords,
+                    "streets": _route_streets(G, best_path),
+                }
+            else:
+                last_frame = {**last_frame, "gen": iteration + 1}
+            gen_history.append(last_frame)
+    
+            # ── early stop on stagnation ───────────────────────────────
+            no_improve = 0 if changed else no_improve + 1
+            if no_improve >= self.N_STAGNATION:
+                break
+    
+        optimized_path = self._or_opt(G, best_path)
+        optimized_cost = self._path_cost(G, optimized_path)
+        if optimized_cost < best_cost:
+            best_path = optimized_path
+            # Reflect the post-Or-opt improvement in the final history frame
             coords = []
             for n in best_path:
                 node = G.nodes.get(n)
@@ -3333,19 +3374,13 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                     coords.append([round(float(node["y"]), 5),
                                     round(float(node["x"]), 5)])
             gen_history.append({
-                "gen":     iteration + 1,
-                "min":     round(best_cost / 60, 3),   # minutes
-                "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),  # km
+                "gen":     gen_history[-1]["gen"] + 1 if gen_history else 1,
+                "min":     round(optimized_cost / 60, 3),
+                "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),
                 "coords":  coords,
                 "streets": _route_streets(G, best_path),
             })
-
-        # ── Step 6: Or-opt post-processing ──────────────────────────
-        optimized_path = self._or_opt(G, best_path)
-        optimized_cost = self._path_cost(G, optimized_path)
-        if optimized_cost < best_cost:
-            best_path = optimized_path
-
+    
         return best_path, gen_history
 
     def _route_multi_stop(self, G, nodes: list, scenario_name: str = "",
@@ -3481,141 +3516,141 @@ class AntColonyElitePro(BaseRoutingAlgorithm):
                 self.name, scenario_name,
                 source_node, target_node, str(e), ms
             )
-    # ══════════════════════════════════════════════════════════════════════════
-# 3.  AntColonyElitePro  — replace _run_aco and find_route
-# ══════════════════════════════════════════════════════════════════════════
- 
-def _aco_elite_pro_run_aco_PATCHED(self, G, source, target):
-    import random, time
-    import networkx as nx
- 
-    rng = random.Random(self.RANDOM_SEED)
- 
-    try:
-        dijkstra_path = nx.shortest_path(G, source, target, weight="travel_time")
-    except (nx.NetworkXNoPath, nx.NodeNotFound):
-        raise nx.NetworkXNoPath(
-            f"ACO-Elite Pro: tidak ada jalur dari {source} ke {target}"
-        )
- 
-    dijkstra_cost   = self._path_cost(G, dijkstra_path)
-    subgraph_nodes  = self._build_subgraph(G, dijkstra_path)
-    candidate_lists = self._build_candidate_lists(G, subgraph_nodes)
-    max_steps       = min(len(subgraph_nodes) * 2, 2000)
- 
-    tau_max, tau_min = self._compute_mmas_bounds(dijkstra_cost, len(subgraph_nodes))
- 
-    pheromone: dict = {}
-    warmup_deposit = self.Q / dijkstra_cost if dijkstra_cost > 0 else 1.0
-    for u, v in zip(dijkstra_path[:-1], dijkstra_path[1:]):
-        init_val = min(self.TAU_INIT + warmup_deposit, tau_max)
-        pheromone[(u, v)] = init_val
- 
-    best_path = dijkstra_path[:]
-    best_cost = dijkstra_cost
-    gen_history: list = []    # ← NEW
- 
-    for iteration in range(self.N_ITERATIONS):
-        iteration_results: list = []
- 
-        for _ in range(self.N_ANTS):
-            path = self._build_ant_path(
-                G, source, target,
-                pheromone, tau_min,
-                candidate_lists, rng, max_steps
-            )
-            if path is None or path[-1] != target:
-                continue
-            cost = self._path_cost(G, path)
-            if cost < float("inf"):
-                iteration_results.append((cost, path))
- 
-        iteration_results.sort(key=lambda x: x[0])
- 
-        if iteration_results:
-            iter_best_cost, iter_best_path = iteration_results[0]
-            if iter_best_cost < best_cost:
-                best_cost = iter_best_cost
-                best_path = iter_best_path[:]
- 
-        tau_max, tau_min = self._compute_mmas_bounds(
-            best_cost, len(subgraph_nodes)
-        )
-        self._evaporate_and_clip(pheromone, tau_min, tau_max)
-        self._deposit_rank_based(pheromone, tau_max, iteration_results)
- 
-        # ── record frame ──────────────────────────────────────────────
-        coords = []
-        for n in best_path:
-            nd = G.nodes.get(n)
-            if nd:
-                coords.append([round(float(nd["y"]), 5),
-                                round(float(nd["x"]), 5)])
-        gen_history.append({
-            "gen":     iteration + 1,
-            "min":     round(_ga_path_cost(G, best_path) / 60, 3),
-            "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),
-            "coords":  coords,
-            "streets": _route_streets(G, best_path),
-        })
-        # ─────────────────────────────────────────────────────────────
- 
-    optimized_path = self._or_opt(G, best_path)
-    optimized_cost = self._path_cost(G, optimized_path)
-    if optimized_cost < best_cost:
-        best_path = optimized_path
- 
-    return best_path, gen_history   # ← TUPLE
- 
- 
-    def _aco_elite_pro_find_route_PATCHED(self, G, source_node, target_node, scenario_name=""):
-        import time
-        import networkx as nx
+    # # ══════════════════════════════════════════════════════════════════════════
+    # # 3.  AntColonyElitePro  — replace _run_aco and find_route
+    # # ══════════════════════════════════════════════════════════════════════════
     
-        self._hav_cache = {}
+    # def _aco_elite_pro_run_aco_PATCHED(self, G, source, target):
+    #     import random, time
+    #     import networkx as nx
     
-        t0 = time.perf_counter()
-        try:
-            route, gen_history = self._run_aco(G, source_node, target_node)
-        except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
-            ms = (time.perf_counter() - t0) * 1000
-            return RouteResult.failure(self.name, scenario_name,
-                                    source_node, target_node, str(e), ms)
+    #     rng = random.Random(self.RANDOM_SEED)
     
-        ms = (time.perf_counter() - t0) * 1000
-        return RouteResult.build(
-            G, self.name, scenario_name,
-            source_node, target_node, route, ms,
-            metadata={
-                "n_ants":           self.N_ANTS,
-                "n_iterations":     self.N_ITERATIONS,
-                "alpha":            self.ALPHA,
-                "beta":             self.BETA,
-                "rho":              self.RHO,
-                "q":                self.Q,
-                "tau_init":         self.TAU_INIT,
-                "mmas_ratio":       self.MMAS_RATIO,
-                "w_rank":           self.W_RANK,
-                "top_k":            self.TOP_K,
-                "bfs_radius":       self.BFS_RADIUS,
-                "or_opt_max_seg":   self.OR_OPT_MAX_SEG,
-                "subgraph_size":    "~200-800 nodes (BFS-2)",
-                "pheromone_scheme": "MMAS (Min-Max Ant System)",
-                "deposit_scheme":   f"rank-based top-{self.W_RANK}",
-                "visibility":       "direction²_guided + haversine_cache",
-                "post_processing":  (
-                    f"Or-opt (seg 1-{self.OR_OPT_MAX_SEG}, "
-                    f"max {self.OR_OPT_MAX_LEN} nodes)"
-                ),
-                # ← evolution viewer fields
-                "generations":      self.N_ITERATIONS,
-                "population":       self.N_ANTS,
-                "gen_history":      gen_history,
-            }
-        )
+    #     try:
+    #         dijkstra_path = nx.shortest_path(G, source, target, weight="travel_time")
+    #     except (nx.NetworkXNoPath, nx.NodeNotFound):
+    #         raise nx.NetworkXNoPath(
+    #             f"ACO-Elite Pro: tidak ada jalur dari {source} ke {target}"
+    #         )
+    
+    #     dijkstra_cost   = self._path_cost(G, dijkstra_path)
+    #     subgraph_nodes  = self._build_subgraph(G, dijkstra_path)
+    #     candidate_lists = self._build_candidate_lists(G, subgraph_nodes)
+    #     max_steps       = min(len(subgraph_nodes) * 2, 2000)
+    
+    #     tau_max, tau_min = self._compute_mmas_bounds(dijkstra_cost, len(subgraph_nodes))
+    
+    #     pheromone: dict = {}
+    #     warmup_deposit = self.Q / dijkstra_cost if dijkstra_cost > 0 else 1.0
+    #     for u, v in zip(dijkstra_path[:-1], dijkstra_path[1:]):
+    #         init_val = min(self.TAU_INIT + warmup_deposit, tau_max)
+    #         pheromone[(u, v)] = init_val
+    
+    #     best_path = dijkstra_path[:]
+    #     best_cost = dijkstra_cost
+    #     gen_history: list = []    # ← NEW
+    
+    #     for iteration in range(self.N_ITERATIONS):
+    #         iteration_results: list = []
+    
+    #         for _ in range(self.N_ANTS):
+    #             path = self._build_ant_path(
+    #                 G, source, target,
+    #                 pheromone, tau_min,
+    #                 candidate_lists, rng, max_steps
+    #             )
+    #             if path is None or path[-1] != target:
+    #                 continue
+    #             cost = self._path_cost(G, path)
+    #             if cost < float("inf"):
+    #                 iteration_results.append((cost, path))
+    
+    #         iteration_results.sort(key=lambda x: x[0])
+    
+    #         if iteration_results:
+    #             iter_best_cost, iter_best_path = iteration_results[0]
+    #             if iter_best_cost < best_cost:
+    #                 best_cost = iter_best_cost
+    #                 best_path = iter_best_path[:]
+    
+    #         tau_max, tau_min = self._compute_mmas_bounds(
+    #             best_cost, len(subgraph_nodes)
+    #         )
+    #         self._evaporate_and_clip(pheromone, tau_min, tau_max)
+    #         self._deposit_rank_based(pheromone, tau_max, iteration_results)
+    
+    #         # ── record frame ──────────────────────────────────────────────
+    #         coords = []
+    #         for n in best_path:
+    #             nd = G.nodes.get(n)
+    #             if nd:
+    #                 coords.append([round(float(nd["y"]), 5),
+    #                                 round(float(nd["x"]), 5)])
+    #         gen_history.append({
+    #             "gen":     iteration + 1,
+    #             "min":     round(_ga_path_cost(G, best_path) / 60, 3),
+    #             "dist":    round(_ga_path_distance(G, best_path) / 1000, 3),
+    #             "coords":  coords,
+    #             "streets": _route_streets(G, best_path),
+    #         })
+    #         # ─────────────────────────────────────────────────────────────
+    
+    #     optimized_path = self._or_opt(G, best_path)
+    #     optimized_cost = self._path_cost(G, optimized_path)
+    #     if optimized_cost < best_cost:
+    #         best_path = optimized_path
+    
+    #     return best_path, gen_history   # ← TUPLE
+ 
+ 
+    # def _aco_elite_pro_find_route_PATCHED(self, G, source_node, target_node, scenario_name=""):
+    #     import time
+    #     import networkx as nx
+    
+    #     self._hav_cache = {}
+    
+    #     t0 = time.perf_counter()
+    #     try:
+    #         route, gen_history = self._run_aco(G, source_node, target_node)
+    #     except (nx.NetworkXNoPath, nx.NodeNotFound) as e:
+    #         ms = (time.perf_counter() - t0) * 1000
+    #         return RouteResult.failure(self.name, scenario_name,
+    #                                 source_node, target_node, str(e), ms)
+    
+    #     ms = (time.perf_counter() - t0) * 1000
+    #     return RouteResult.build(
+    #         G, self.name, scenario_name,
+    #         source_node, target_node, route, ms,
+    #         metadata={
+    #             "n_ants":           self.N_ANTS,
+    #             "n_iterations":     self.N_ITERATIONS,
+    #             "alpha":            self.ALPHA,
+    #             "beta":             self.BETA,
+    #             "rho":              self.RHO,
+    #             "q":                self.Q,
+    #             "tau_init":         self.TAU_INIT,
+    #             "mmas_ratio":       self.MMAS_RATIO,
+    #             "w_rank":           self.W_RANK,
+    #             "top_k":            self.TOP_K,
+    #             "bfs_radius":       self.BFS_RADIUS,
+    #             "or_opt_max_seg":   self.OR_OPT_MAX_SEG,
+    #             "subgraph_size":    "~200-800 nodes (BFS-2)",
+    #             "pheromone_scheme": "MMAS (Min-Max Ant System)",
+    #             "deposit_scheme":   f"rank-based top-{self.W_RANK}",
+    #             "visibility":       "direction²_guided + haversine_cache",
+    #             "post_processing":  (
+    #                 f"Or-opt (seg 1-{self.OR_OPT_MAX_SEG}, "
+    #                 f"max {self.OR_OPT_MAX_LEN} nodes)"
+    #             ),
+    #             # ← evolution viewer fields
+    #             "generations":      self.N_ITERATIONS,
+    #             "population":       self.N_ANTS,
+    #             "gen_history":      gen_history,
+    #         }
+    #     )
  
     
-    # ══════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════
 # SECTION 6: SIMULATED ANNEALING (SA)
 
 # "strategy": "pheromone × (1/travel_time) visibility, no highway weighting"

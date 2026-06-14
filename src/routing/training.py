@@ -436,6 +436,8 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
                        .agg(visited=("visited_count", "sum"),
                             runtime_ms=("computation_ms", "mean"),
                             distance_km=("distance_km", "sum"),
+                            travel_min=("travel_min", "sum"),
+                            service_min=("service_min", "sum"),
                             total_min=("total_min", "sum"),
                             feasible=("feasible", "mean"))
                        .reset_index())
@@ -443,20 +445,31 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
         for _it in range(1, n_iter + 1):
             _g = _sub_veh[_sub_veh["iteration"] == _it]
             if not _g.empty:
-                _cov = float(_g["visited"].mean())
-                _tmin = float(_g["total_min"].mean())
+                _cov   = float(_g["visited"].mean())
+                _tmin  = float(_g["total_min"].mean())
+                _dist  = float(_g["distance_km"].sum())
+                _trav  = float(_g["travel_min"].sum())
+                _svc   = float(_g["service_min"].sum())
+                _vis   = float(_g["visited"].sum())
                 per_iter_detail.append({
                     "iter":        _it,
                     "coverage":    round(_cov, 1),
                     "runtime_ms":  round(float(_g["runtime_ms"].mean()), 1),
                     "distance_km": round(float(_g["distance_km"].mean()), 2),
+                    "total_min":   round(_tmin, 1),
+                    "speed_kph":   round(_dist / (_trav / 60), 1) if _trav > 0 else 0.0,
                     "throughput":  round(_cov / (_tmin / 60), 2) if _tmin > 0 else 0.0,
+                    "spatial_eff": round(_vis / _dist, 2) if _dist > 0 else 0.0,
+                    "service_ratio_pct": round(_svc / (_svc + _trav) * 100, 1) if (_svc + _trav) > 0 else 0.0,
+                    "time_util_pct": round(_tmin / budget_min * 100, 1) if budget_min else 0.0,
                     "feasible_pct": round(float(_g["feasible"].mean() * 100), 1),
                 })
             else:
                 per_iter_detail.append({
                     "iter": _it, "coverage": 0.0, "runtime_ms": 0.0,
-                    "distance_km": 0.0, "throughput": 0.0, "feasible_pct": 0.0,
+                    "distance_km": 0.0, "total_min": 0.0, "speed_kph": 0.0,
+                    "throughput": 0.0, "spatial_eff": 0.0, "service_ratio_pct": 0.0,
+                    "time_util_pct": 0.0, "feasible_pct": 0.0,
                 })
 
         # Per-shift detail granular (identitas: kendaraan/unit/shift per iterasi)
@@ -505,6 +518,30 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
         per_iter = (g.groupby("iteration")["total_visited"].mean()
                      .reindex(range(1, n_iter + 1)).fillna(0).round(2).tolist())
 
+        # Jarak, kecepatan, efisiensi spasial & rasio layanan (agregat)
+        _veh_dist     = sub.groupby(["vehicle", "vehicle_unit", "iteration"])["distance_km"].sum()
+        avg_dist_km   = float(_veh_dist.mean()) if len(_veh_dist) else 0.0
+        _tot_dist     = float(sub["distance_km"].sum())
+        _tot_travel_h = float(sub["travel_min"].sum()) / 60
+        _tot_svc      = float(sub["service_min"].sum())
+        _tot_trav     = float(sub["travel_min"].sum())
+        avg_speed_kph = _tot_dist / _tot_travel_h if _tot_travel_h > 0 else 0.0
+        spatial_eff   = float(sub["visited_count"].sum()) / _tot_dist if _tot_dist > 0 else 0.0
+        service_ratio = _tot_svc / (_tot_svc + _tot_trav) * 100 if (_tot_svc + _tot_trav) > 0 else 0.0
+
+        # Rata-rata jarak & waktu per kendaraan-run, dipisah motor vs mobil
+        by_vehicle = {}
+        for _vt, _vg in sub.groupby("vehicle"):
+            _runs_v = (_vg.groupby(["vehicle_unit", "iteration"])
+                          .agg(dist=("distance_km", "sum"),
+                               tmin=("total_min", "sum"),
+                               vis=("visited_count", "sum")))
+            by_vehicle[str(_vt)] = {
+                "distance_km": round(float(_runs_v["dist"].mean()), 1),
+                "total_min":   round(float(_runs_v["tmin"].mean()), 1),
+                "visited":     round(float(_runs_v["vis"].mean()), 1),
+            }
+
         dn, tagline, icon, color = _MODEL_META.get(name, (name, "", "⭐", "#64748b"))
         models.append({
             "name": name, "display_name": dn, "tagline": tagline,
@@ -519,6 +556,11 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
             "feasible_pct":          round(float(sub["feasible"].mean() * 100), 1),
             "avg_runtime_ms":        round(float(sub["computation_ms"].mean()), 1),
             "throughput":            round(throughput, 2),
+            "avg_distance_km":       round(avg_dist_km, 1),
+            "avg_speed_kph":         round(avg_speed_kph, 1),
+            "spatial_eff":           round(spatial_eff, 2),
+            "service_ratio_pct":     round(service_ratio, 1),
+            "by_vehicle":            by_vehicle,
             "time_util_pct":         round(float(sub["total_min"].mean()) / budget_min * 100, 1),
             "convergence_speed_pct": conv_speed,
             "per_iteration":         per_iter,

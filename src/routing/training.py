@@ -415,13 +415,39 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
         mean_total   = float(g["total_time"].mean())
         throughput   = coverage_avg / (mean_total / 60) if mean_total > 0 else 0.0
 
+        # Per-iteration detail (for viewer dropdown: runtime history + convergence)
+        _sub_veh = (sub.groupby(["vehicle", "vehicle_unit", "iteration"])
+                       .agg(visited=("visited_count", "sum"),
+                            runtime_ms=("computation_ms", "mean"),
+                            distance_km=("distance_km", "sum"),
+                            feasible=("feasible", "mean"))
+                       .reset_index())
+        per_iter_detail = []
+        for _it in range(1, n_iter + 1):
+            _g = _sub_veh[_sub_veh["iteration"] == _it]
+            if not _g.empty:
+                per_iter_detail.append({
+                    "iter":        _it,
+                    "coverage":    round(float(_g["visited"].mean()), 1),
+                    "runtime_ms":  round(float(_g["runtime_ms"].mean()), 1),
+                    "distance_km": round(float(_g["distance_km"].mean()), 2),
+                    "feasible_pct": round(float(_g["feasible"].mean() * 100), 1),
+                })
+            else:
+                per_iter_detail.append({
+                    "iter": _it, "coverage": 0.0, "runtime_ms": 0.0,
+                    "distance_km": 0.0, "feasible_pct": 0.0,
+                })
+
         # Konvergensi: ambil best vehicle-run model ini, pakai gen_history shift-1
         conv, best_total = [], -1
         for (m, vt, u), info in best_run.items():
             if m == name and info["total"] > best_total:
                 best_total = info["total"]
                 gh = (info["shifts"][0].get("gen_history", []) if info["shifts"] else [])
-                conv = [{"x": fr["gen"], "visited": fr["visited"]} for fr in gh]
+                conv = [{"x": fr["gen"], "visited": fr["visited"],
+                         "total_min": fr.get("total_min", 0),
+                         "travel_min": fr.get("travel_min", 0)} for fr in gh]
         conv_speed = 0.0
         if conv:
             gmax = conv[-1]["x"] or 1
@@ -451,6 +477,7 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
             "time_util_pct":         round(float(sub["total_min"].mean()) / budget_min * 100, 1),
             "convergence_speed_pct": conv_speed,
             "per_iteration":         per_iter,
+            "per_iter_detail":       per_iter_detail,
             "convergence":           conv,
         })
 

@@ -117,7 +117,7 @@ class Settings:
     # kembali ke depot, di bawah batas jam kerja (shift). Bukan lagi
     # shortest-path/TSP min-time.
 
-    SERVICE_TIME_S      = 600       # 10 menit berhenti per titik untuk cek fasilitas
+    SERVICE_TIME_S      = 300       # 5 menit berhenti per titik untuk cek fasilitas
     SHIFT_SECONDS       = 6 * 3600  # 1 shift = 6 jam jam kerja
     N_SHIFTS            = 2         # 2 shift per kendaraan (6 jam + 6 jam)
     TRAINING_ITERATIONS = 10        # tiap model dijalankan 10x per kendaraan

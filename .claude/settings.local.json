@@ -9,7 +9,9 @@
       "Bash(python -)",
       "Bash(python -m py_compile src/routing/base.py src/routing/benchmark.py src/routing/algorithms.py src/routing/evolve_viz.py src/routing/visualize.py)",
       "Bash(python -m py_compile src/routing/algorithms.py)",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('src/routing/evolve_viz.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/routing/evolve_viz.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3)"
     ]
   }
 }

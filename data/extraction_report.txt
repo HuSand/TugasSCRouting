@@ -1,13 +1,10 @@
-Extraction Report ï¿½ Surabaya, Indonesia
-Generated: 2026-06-09T23:31:21.828039
-Generated: 2026-06-09T23:02:41.600588
+Extraction Report — Surabaya, Indonesia
+Generated: 2026-06-14T01:21:59.071658
 ==================================================
 
 FACILITIES
   education: 1697
-  education: 1697
   community: 1145
-  transport: 1068
   transport: 1068
   government: 698
   healthcare: 436
@@ -16,21 +13,17 @@ FACILITIES
 ROAD NETWORK
   Nodes: 36656
   Edges: 89091
-  Avg speed: 29.5 km/h
+  Avg speed: 29.4 km/h
 
 SNAP QUALITY
-  Mean: 48.5m
   Mean: 48.5m
   >500m: 6 facilities
 
 OUTPUT FILES
-  comparison_chart.png: 76.9 KB
   comparison_chart.png: 77.8 KB
   comparison_map_ciputra_to_rsu_haji.html: 51.3 KB
   comparison_map_cross_city_zigzag_7.html: 213.7 KB
   comparison_map_darmo_to_rsu_haji.html: 34.3 KB
-  comparison_map_emergency_patrol_circuit.html: 374.6 KB
-  comparison_map_emergency_west_to_east_5.html: 149.8 KB
   comparison_map_emergency_patrol_circuit.html: 376.0 KB
   comparison_map_emergency_west_to_east_5.html: 149.8 KB
   comparison_map_full_city_patrol_9.html: 235.8 KB
@@ -39,8 +32,6 @@ OUTPUT FILES
   comparison_map_police_healthcare_patrol_5.html: 123.2 KB
   comparison_map_polsek_genteng_to_rs_darmo.html: 27.2 KB
   comparison_map_polsek_rungkut_to_rs_onkologi.html: 34.4 KB
-  comparison_map_terminal_circuit.html: 228.0 KB
-  comparison_results.csv: 193.32 MB
   comparison_map_south_east_emergency_chain_5.html: 93.8 KB
   comparison_map_terminal_circuit.html: 213.2 KB
   comparison_map_west_central_east_response_5.html: 111.0 KB
@@ -64,10 +55,10 @@ OUTPUT FILES
   facilities_raw.geojson: 21.43 MB
   facilities_with_network.csv: 835.2 KB
   facilities_with_network.geojson: 2.74 MB
-  facility_distribution.png: 38.9 KB
-  road_network.graphml: 50.22 MB
-  road_network_edges.geojson: 49.71 MB
+  facility_distribution.png: 39.2 KB
+  road_network.graphml: 50.28 MB
+  road_network_edges.geojson: 49.66 MB
   road_network_nodes.geojson: 8.38 MB
   routes_clean.json: 16.2 KB
-  snap_distance_histogram.png: 42.5 KB
-  surabaya_facilities_map.html: 5.04 MB
+  snap_distance_histogram.png: 38.9 KB
+  surabaya_facilities_map.html: 6.29 MB

@@ -11,7 +11,8 @@
       "Bash(python -m py_compile src/routing/algorithms.py)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('src/routing/evolve_viz.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
       "Bash(python3 -c ' *)",
-      "Bash(python3)"
+      "Bash(python3)",
+      "Bash(python -c ' *)"
     ]
   }
 }

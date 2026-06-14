@@ -383,7 +383,7 @@ if (DATA && DATA.generated) {
   document.getElementById('metaRight').innerHTML =
     `Generated ${DATA.generated}<br>Target ${DATA.target} titik/kendaraan · shift ${DATA.shift_min}m · service ${DATA.service_min}m`;
   document.getElementById('targetPill').textContent =
-    `Target ${DATA.target} titik · ${DATA.n_iterations||'?'} iterasi`;
+    `Target ${DATA.target} titik/sesi · ${DATA.n_iterations||'?'} iterasi`;
 }
 
 /* ── Tabs ── */
@@ -447,7 +447,7 @@ function fillVehicles(){
   if (!vehicleSel || !modelSel) return;
   vehicleSel.innerHTML = '';
   runsFor(modelSel.value).forEach(r =>
-    vehicleSel.add(new Option(`${r.vehicle} #${r.vehicle_unit} — total ${r.vehicle_total} titik`, `${r.vehicle}#${r.vehicle_unit}`)));
+    vehicleSel.add(new Option(`${r.vehicle} #${r.vehicle_unit}`, `${r.vehicle}#${r.vehicle_unit}`)));
 }
 
 function fillShifts(){
@@ -734,7 +734,7 @@ function renderDashboard(){
 
   let html = `<div class="card">
     <h2>👑 Global Best Iteration Podium</h2>
-    <div class="sub">Tiga eksekusi paling optimal — coverage tertinggi, jarak terpendek</div>
+    <div class="sub">Tiga eksekusi paling optimal</div>
     <div class="podium-wrapper">`;
 
   const podiumRanks = [
@@ -822,8 +822,6 @@ function renderDashboard(){
         <div class="lb-section">
           <div class="bars-vertical">
             ${bar('Coverage vs Target', m.coverage_avg/target*100, m.coverage_avg+' / '+target, m.color)}
-            ${bar('Konsistensi', m.consistency_pct, m.consistency_pct+'%', '#10b981')}
-            ${bar('Success Rate', m.success_rate_pct, m.success_rate_pct+'%', '#f59e0b')}
           </div>
           <div class="metrics-grid">
             <div class="metric-pill runtime"><span class="icon">⚡</span> Runtime: <b>${m.avg_runtime_ms} ms/shift</b></div>

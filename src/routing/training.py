@@ -207,6 +207,7 @@ def run_multi_vehicle_training(cfg):
                 vehicle = base.vehicle
                 shift_results = []
                 vehicle_visited: set = set()
+                veh_row_start = len(rows)   # pointer: rows added for this vehicle this iter
 
                 for shift in range(1, cfg.N_SHIFTS + 1):
                     excl = set(visited_global) | vehicle_visited
@@ -236,23 +237,36 @@ def run_multi_vehicle_training(cfg):
                         "distance_km":    round(dist_km, 2),
                         "refills_est":    refills,
                         "computation_ms": round(res.computation_ms, 1),
+                        # time_feasible sementara; diperbarui setelah vehicle_total diketahui
                         "feasible":       res.metadata.get("feasible", res.found),
                     })
 
                 vehicle_total = len(vehicle_visited)
                 visited_global |= vehicle_visited
 
+                # Feasible = time budget OK  AND  vehicle mencapai target harian (55 titik)
+                # Kedua syarat harus terpenuhi agar shift dianggap feasible.
+                vehicle_target_met = vehicle_total >= cfg.MIN_POINTS_TARGET
+                for row in rows[veh_row_start:]:
+                    row["feasible"] = bool(row["feasible"]) and vehicle_target_met
+
                 key = (model.name, vtype, unit)
                 if key not in best_run or vehicle_total > best_run[key]["total"]:
+                    shifts = [_shift_payload(r) for r in shift_results]
+                    for sh in shifts:
+                        sh["feasible"] = bool(sh["feasible"]) and vehicle_target_met
                     best_run[key] = {
                         "total":   vehicle_total,
                         "iter":    it,
                         "vehicle": vtype,
                         "unit":    unit,
-                        "shifts":  [_shift_payload(r) for r in shift_results],
+                        "shifts":  shifts,
                     }
 
-            log.info(f"  iter {it:>2}: total titik unik fleet = {len(visited_global)}")
+            fleet_total   = len(visited_global)
+            fleet_target  = cfg.MIN_POINTS_TARGET * len(fleet)   # 55 × 2 = 110
+            fleet_status  = "✓" if fleet_total >= fleet_target else f"✗ (butuh {fleet_target})"
+            log.info(f"  iter {it:>2}: fleet total = {fleet_total} titik {fleet_status}")
 
     # ── Save CSV ─────────────────────────────────────────────
     df = pd.DataFrame(rows)

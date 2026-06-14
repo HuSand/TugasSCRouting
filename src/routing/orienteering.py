@@ -445,10 +445,10 @@ def pso_orienteering(problem, algo_name, scenario_name, *,
 def _frame(problem, gen, order) -> dict:
     """Frame ringan per-generasi untuk kurva evolusi viewer/insight."""
     return {
-        "gen":       gen,
-        "visited":   len(order),
-        "total_min": round(problem.total_time(order) / 60, 1),
-        "travel_min": round(problem.travel_time(order) / 60, 1),
+        "gen":          gen,
+        "visited":      len(order),
+        "total_min":    round(problem.total_time(order) / 60, 1),
+        "travel_min":  round(problem.travel_time(order) / 60, 1),
     }
 
 

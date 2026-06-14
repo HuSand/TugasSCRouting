@@ -183,13 +183,18 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .lb-card > div:last-child{padding-left:16px;min-width:140px;max-width:180px}
   .lb-main{display:flex;flex-direction:column;gap:14px}
   .lb-section{background:#f8fafc;border:1px solid rgba(226,232,240,.9);border-radius:18px;padding:18px}
-  .metrics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
-  .metric-pill{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;color:#fff;font-size:12.5px;font-weight:700;box-shadow:0 10px 24px rgba(15,23,42,.08)}
+  .metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(208px,1fr));gap:10px;margin-top:14px}
+  .metric-pill{display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:14px;color:#fff;font-size:12.5px;font-weight:700;box-shadow:0 10px 24px rgba(15,23,42,.08)}
   .metric-pill span.icon{font-size:14px}
   .metric-pill.runtime{background:linear-gradient(135deg,#312e81,#4338ca)}
   .metric-pill.convergence{background:linear-gradient(135deg,#0f766e,#115e59)}
   .metric-pill.throughput{background:linear-gradient(135deg,#1d4ed8,#2563eb)}
   .metric-pill.feasibility{background:linear-gradient(135deg,#15803d,#166534)}
+  .metric-pill.distance{background:linear-gradient(135deg,#0369a1,#0ea5e9)}
+  .metric-pill.speed{background:linear-gradient(135deg,#0e7490,#0891b2)}
+  .metric-pill.spatial{background:linear-gradient(135deg,#b45309,#d97706)}
+  .metric-pill.serviceratio{background:linear-gradient(135deg,#0f766e,#0d9488)}
+  .metric-pill.timeutil{background:linear-gradient(135deg,#6b21a8,#9333ea)}
   .metric-pill b{font-weight:800}
   .best-run-banner{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#eef2ff,#f8fafc);
     color:#0f172a;border:1px solid #cbd5e1;padding:10px 14px;border-radius:14px;font-size:12px;font-weight:700;margin-bottom:14px}
@@ -231,27 +236,30 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .accordion-trigger .caret{display:inline-block;transition:transform .3s ease}
   .accordion-trigger.open .caret{transform:rotate(180deg)}
   .accordion-content{max-height:0;opacity:0;overflow:hidden;
-    transition:max-height .38s cubic-bezier(.4,0,.2,1),opacity .25s ease,margin-top .3s ease,padding-top .3s ease;
-    margin-top:0;border-top:1.5px dashed transparent;padding-top:0}
-  .accordion-content.open{max-height:1600px;opacity:1;margin-top:14px;border-top-color:var(--line);padding-top:14px}
-  .table-container{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.02);max-height:340px;overflow-y:auto}
-  .iter-table{width:100%;border-collapse:collapse;font-size:12px;text-align:center}
-  .iter-table th,.iter-table td{padding:9px 10px;border-bottom:1px solid var(--line)}
-  .iter-table th{background:#f8fafc;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0}
+    transition:max-height .38s cubic-bezier(.4,0,.2,1),opacity .25s ease,margin-top .3s ease;margin-top:0}
+  .accordion-content.open{max-height:1600px;opacity:1;margin-top:14px}
+  .acc-single{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.03)}
+  .acc-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .table-container{border:1px solid var(--line);border-radius:12px;overflow:auto;background:#fff;max-height:360px}
+  .iter-table{width:100%;border-collapse:collapse;font-size:12.5px;text-align:center}
+  .iter-table th,.iter-table td{padding:11px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .iter-table th{background:#f1f5f9;color:#475569;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;z-index:1}
+  .iter-table tbody tr:nth-child(even){background:#fafcff}
+  .iter-table tbody tr:hover{background:#eff6ff}
   .iter-table tr:last-child td{border-bottom:none}
-  .iter-table tr.best-row{background:#f0fdf4;font-weight:700;color:#15803d}
+  .iter-table tr.best-row{background:#f0fdf4!important;font-weight:700;color:#15803d}
   .iter-table tr.best-row td{border-top:1px solid #bbf7d0;border-bottom:1px solid #bbf7d0}
-  .iter-table .veh-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700}
-  .iter-table .veh-motor{background:#dbeafe;color:#1d4ed8}
-  .iter-table .veh-mobil{background:#fee2e2;color:#b91c1c}
-  .iter-table td.no{color:#b91c1c;font-weight:700}.iter-table td.yes{color:#15803d;font-weight:700}
-  .acc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .dt-title{font-size:12px;font-weight:700;margin-bottom:8px;color:var(--ink)}
-  .acc-note{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.4}
-  .acc-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+  .iter-table .veh-tag{display:inline-block;padding:3px 10px;border-radius:7px;font-size:10.5px;font-weight:700}
+  .veh-motor{background:#dbeafe;color:#1d4ed8}
+  .veh-mobil{background:#fee2e2;color:#b91c1c}
+  .iter-table td.no{color:#dc2626;font-weight:800}.iter-table td.yes{color:#16a34a;font-weight:800}
+  .dt-title{font-size:12.5px;font-weight:700;margin-bottom:8px;color:var(--ink)}
+  .acc-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  .acc-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .acc-filters label{font-size:10.5px;color:var(--muted);font-weight:600}
-  .acc-filters select{font-size:11px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
-  @media(max-width:700px){.acc-grid{grid-template-columns:1fr}}
+  .acc-filters select{font-size:11.5px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
+  .podium-veh{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:6px}
+  .podium-veh .veh-tag{display:inline-block;padding:2px 9px;border-radius:6px;font-size:10.5px;font-weight:700}
 
   /* Sub-card drilldown (klik metric pill -> timeline inline) */
   .metric-pill{cursor:pointer;position:relative;transition:transform .12s,box-shadow .12s}
@@ -261,12 +269,22 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .metric-pill.sel .chev{transform:rotate(180deg)}
   .subcard-panel{max-height:0;opacity:0;overflow:hidden;
     transition:max-height .38s cubic-bezier(.4,0,.2,1),opacity .25s ease,margin-top .3s ease;margin-top:0}
-  .subcard-panel.open{max-height:560px;opacity:1;margin-top:12px}
-  .subcard-inner{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}
+  .subcard-panel.open{max-height:900px;opacity:1;margin-top:12px}
+  .subcard-inner{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px}
   .subcard-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
   .subcard-stats .s{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:11px;color:var(--muted);font-weight:600}
   .subcard-stats .s b{display:block;font-size:15px;color:var(--ink);font-weight:800;margin-top:2px}
   @media(max-width:700px){.subcard-inner{grid-template-columns:1fr}}
+  /* Convergence sub-card (multi-curve) */
+  .subcard-inner .conv-wrap{grid-column:1/-1}
+  .conv-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .conv-charts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .conv-cell{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px}
+  .conv-cap{font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+  .conv-cap span{font-size:9.5px;font-weight:600;padding:1px 6px;border-radius:5px}
+  .conv-cap.up span{background:#dcfce7;color:#15803d}
+  .conv-cap.down span{background:#dbeafe;color:#1d4ed8}
+  @media(max-width:820px){.conv-charts{grid-template-columns:1fr}}
 
   /* SVG chart tooltip + hover dots */
   .svg-wrap{position:relative}
@@ -295,6 +313,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .feas-fleet .fc{flex:1;min-width:44px;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 2px;background:#fff;font-size:11px}
   .feas-fleet .fc.meets{background:#dcfce7;border-color:#86efac;color:#15803d;font-weight:700}
   .feas-fleet .fc .fn{font-size:10px;color:var(--muted)}.feas-fleet .fc.meets .fn{color:#15803d}
+  .feas-sub2{font-size:11.5px;color:var(--muted);font-weight:600;margin:-2px 0 10px}
+  .feas-tag{font-size:9px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:5px;margin-left:6px;text-transform:none;letter-spacing:0}
   @media(max-width:560px){.feas-levers{grid-template-columns:1fr}}
 
   /* Bars */
@@ -329,8 +349,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   table.cmp th.sorted .arr{opacity:1;color:var(--accent)}
 
   /* Chart selector */
-  .chart-selector-wrapper{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-bottom:10px}
-  .chart-btn{background:#fff;border:1.5px solid var(--line);padding:8px 16px;border-radius:10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s;min-width:170px;text-align:center}
+  .chart-selector-wrapper{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;margin-bottom:12px}
+  .chart-btn{background:#fff;border:1.5px solid var(--line);padding:7px 13px;border-radius:10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s;min-width:auto;text-align:center}
   .chart-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 8px 20px rgba(37,99,235,.16)}
   .charts-layout{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:22px}
   .chart-box{background:#f8fafc;border:1px solid var(--line);border-radius:16px;padding:18px;min-height:300px;display:flex;flex-direction:column}
@@ -705,10 +725,15 @@ if (shiftSel) shiftSel.onchange = renderRoute;
 fillVehicles(); fillShifts(); renderRoute();
 
 /* ── SVG line chart ── */
-/* cumulative max (best-so-far) — bikin kurva terbaca sebagai konvergensi */
+/* cumulative max (best-so-far) — objektif yang dimaksimasi (titik) */
 function bestSoFar(points){
   let mx = -Infinity;
   return points.map(p => { mx = Math.max(mx, p.y); return {x:p.x, y:mx, raw:p.y}; });
+}
+/* cumulative min (best-so-far) — cost yang diminimasi (jarak/waktu) */
+function bestSoFarMin(points){
+  let mn = Infinity;
+  return points.map(p => { if(p.y>0) mn = Math.min(mn, p.y); return {x:p.x, y:(mn===Infinity?p.y:mn), raw:p.y}; });
 }
 
 function lineChart(host, series, opts){
@@ -813,9 +838,28 @@ function sortCmpTable(col){
 
 /* Sub-card drilldown: timeline per iterasi (1..N) */
 const SUBCARD_META = {
-  runtime:     {key:'runtime_ms',  title:'⚡ Runtime per Iterasi', unit:'ms',        color:'#4338ca', dec:1},
-  throughput:  {key:'throughput',  title:'🛞 Throughput per Iterasi', unit:'titik/jam', color:'#2563eb', dec:2},
-  feasibility: {key:'feasible_pct',title:'✅ Feasible per Iterasi', unit:'%',         color:'#16a34a', dec:1},
+  runtime:      {key:'runtime_ms',        title:'⚡ Runtime per Iterasi',        unit:'ms',        color:'#4338ca', dec:1},
+  throughput:   {key:'throughput',        title:'🛞 Throughput per Iterasi',     unit:'titik/jam', color:'#2563eb', dec:2},
+  feasibility:  {key:'feasible_pct',      title:'✅ Feasible per Iterasi',        unit:'%',         color:'#16a34a', dec:1},
+  distance:     {key:'distance_km',       title:'🛣️ Jarak per Iterasi',          unit:'km',        color:'#0ea5e9', dec:2},
+  speed:        {key:'speed_kph',         title:'💨 Kecepatan per Iterasi',       unit:'km/jam',    color:'#0891b2', dec:1},
+  timeutil:     {key:'time_util_pct',     title:'⏱️ Utilisasi Waktu per Iterasi', unit:'%',         color:'#9333ea', dec:1},
+  spatial:      {key:'spatial_eff',       title:'🎯 Efisiensi per Iterasi',       unit:'titik/km',  color:'#d97706', dec:2},
+  serviceratio: {key:'service_ratio_pct', title:'🧰 Rasio Layanan per Iterasi',   unit:'%',         color:'#0d9488', dec:1},
+};
+
+/* Registry metrik untuk Analisis Multimetrik (per-iterasi + konvergensi bila ada) */
+const METRICS = {
+  coverage:     {label:'🎯 Coverage',      iter:'coverage',          unit:'titik',     conv:'visited',    max:true},
+  runtime:      {label:'⚡ Runtime',        iter:'runtime_ms',        unit:'ms'},
+  throughput:   {label:'🛞 Throughput',     iter:'throughput',        unit:'titik/jam'},
+  distance:     {label:'🛣️ Jarak',          iter:'distance_km',       unit:'km',        conv:'travel_min', max:false},
+  speed:        {label:'💨 Kecepatan',      iter:'speed_kph',         unit:'km/jam'},
+  spatial:      {label:'🎯 Efisiensi',      iter:'spatial_eff',       unit:'titik/km'},
+  serviceratio: {label:'🧰 Rasio Layanan',  iter:'service_ratio_pct', unit:'%'},
+  timeutil:     {label:'⏱️ Utilisasi',      iter:'time_util_pct',     unit:'%'},
+  feasible:     {label:'✅ Feasible',        iter:'feasible_pct',      unit:'%'},
+  waktu:        {label:'⏱️ Total Waktu',    iter:'total_min',         unit:'mnt',       conv:'total_min',  max:false},
 };
 function toggleSubcard(idx, metric, pill){
   const panel = document.getElementById('subcard-'+idx);
@@ -829,18 +873,25 @@ function toggleSubcard(idx, metric, pill){
 
   if (metric === 'convergence'){
     const keys = Object.keys(m.convergence_by_shift||{});
-    inner.innerHTML = `<div><div class="dt-title">🚀 Konvergensi Objektif (best-so-far)</div>
-      <div id="sc-conv-${idx}" style="min-height:180px"></div>
-      <div class="acc-note">Sumbu Y = titik dikunjungi pada shift; X = progres pencarian (%).</div></div>
-      <div><div class="dt-title">Ringkasan</div><div class="subcard-stats">
-        <div class="s">Konvergensi<b>${m.convergence_speed_pct}%</b></div>
-        <div class="s">Shift tersedia<b>${keys.length}</b></div>
-        <div class="s">Objektif final<b>${(m.convergence||[]).slice(-1)[0]?.visited ?? '—'}</b></div>
-      </div><div class="acc-note">"Konvergensi %" = seberapa dini (sisa progres) algoritma mencapai 95% kualitas solusi.</div></div>`;
-    const host = document.getElementById('sc-conv-'+idx);
-    const series = keys.map((k,i) => ({name:'Shift '+k, color: i? '#f59e0b': m.color,
-      points: bestSoFar((m.convergence_by_shift[k]||[]).map(c=>({x:c.progress,y:c.visited})))}));
-    lineChart(host, series, {xmin:0,xmax:100,xlabel:'Progres pencarian (%)',xname:'progres',unit:'titik',w:380,h:180});
+    const cmv = m.convergence_meta || {};
+    const ident = cmv.vehicle ? `${capV(cmv.vehicle)} unit ${cmv.unit}, iterasi #${cmv.iter}` : '—';
+    const shiftBtns = keys.map((k,i)=>`<button class="chart-btn conv-shift-btn ${i===0?'active':''}" style="min-width:auto;padding:5px 14px" onclick="drawConvSub(${idx},'${k}',this)">Shift ${k}</button>`).join('');
+    inner.innerHTML = `<div class="conv-wrap">
+      <div class="conv-bar">
+        <div>
+          <div class="dt-title" style="margin:0">🚀 Konvergensi per Generasi (best-so-far)</div>
+          <div class="acc-note" style="margin-top:2px">Run terbaik: <b>${ident}</b> · Konvergensi ${m.convergence_speed_pct}% (seberapa dini capai 95% kualitas)</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${shiftBtns}</div>
+      </div>
+      <div class="conv-charts">
+        <div class="conv-cell"><div class="conv-cap up">🎯 Titik dikunjungi <span>maksimasi ↑</span></div><div id="sc-cv-vis-${idx}" style="min-height:150px"></div></div>
+        <div class="conv-cell"><div class="conv-cap down">🛣️ Travel time <span>minimasi ↓</span></div><div id="sc-cv-trav-${idx}" style="min-height:150px"></div></div>
+        <div class="conv-cell"><div class="conv-cap down">⏱️ Total waktu <span>minimasi ↓</span></div><div id="sc-cv-tot-${idx}" style="min-height:150px"></div></div>
+      </div>
+      <div class="acc-note">Objektif (titik) naik → makin baik; cost (travel/total) turun → makin baik. Tiap kurva = nilai best-so-far sepanjang generasi pencarian untuk shift terpilih.</div>
+    </div>`;
+    drawConvSub(idx, keys[0] || '1', null);
   } else {
     const cfg = SUBCARD_META[metric];
     const pts = (m.per_iter_detail||[]).map(d => ({x:d.iter, y:d[cfg.key]}));
@@ -875,15 +926,21 @@ function filterShiftTable(idx){
   });
 }
 
-function drawConvShift(idx, key, btn){
-  const m = DATA.dashboard.models[idx];
-  const host = document.getElementById('conv-mini-'+idx); if (!m||!host) return;
+function drawConvSub(idx, key, btn){
+  const m = DATA.dashboard.models[idx]; if (!m) return;
   if (btn){ btn.parentElement.querySelectorAll('.conv-shift-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
   const frames = (m.convergence_by_shift||{})[key] || [];
-  if (!frames.length){ host.innerHTML = '<div style="padding:20px;text-align:center;font-size:11px;color:var(--muted)">Tidak ada data konvergensi shift ini</div>'; return; }
-  lineChart(host, [{name:'Shift '+key+' (best-so-far)', color:m.color,
-    points: bestSoFar(frames.map(c=>({x:c.progress,y:c.visited})))}],
-    {xmin:0, xmax:100, xlabel:'Progres pencarian (%)', xname:'progres', unit:'titik', w:340, h:170});
+  const hVis = document.getElementById('sc-cv-vis-'+idx);
+  const hTrav= document.getElementById('sc-cv-trav-'+idx);
+  const hTot = document.getElementById('sc-cv-tot-'+idx);
+  if (!frames.length){
+    [hVis,hTrav,hTot].forEach(h=>{ if(h) h.innerHTML='<div style="padding:20px;text-align:center;font-size:11px;color:var(--muted)">Tidak ada data</div>'; });
+    return;
+  }
+  const o = {xmin:0, xmax:100, xlabel:'Progres pencarian (%)', xname:'progres', w:320, h:150};
+  lineChart(hVis,  [{name:'Shift '+key, color:'#16a34a', points: bestSoFar(frames.map(c=>({x:c.progress,y:c.visited})))}],     Object.assign({unit:'titik'}, o));
+  lineChart(hTrav, [{name:'Shift '+key, color:'#2563eb', points: bestSoFarMin(frames.map(c=>({x:c.progress,y:c.travel_min||0})))}], Object.assign({unit:'mnt'}, o));
+  lineChart(hTot,  [{name:'Shift '+key, color:'#7c3aed', points: bestSoFarMin(frames.map(c=>({x:c.progress,y:c.total_min||0})))}],  Object.assign({unit:'mnt'}, o));
 }
 
 function toggleAccordion(idx, btn){
@@ -1017,6 +1074,11 @@ function renderDashboard(){
             <div class="metric-pill convergence" onclick="toggleSubcard(${idx},'convergence',this)"><span class="icon">🚀</span> Konvergensi: <b>${m.convergence_speed_pct}%</b><span class="chev">▼</span></div>
             <div class="metric-pill throughput" onclick="toggleSubcard(${idx},'throughput',this)"><span class="icon">🛞</span> Throughput: <b>${m.throughput} titik/jam</b><span class="chev">▼</span></div>
             <div class="metric-pill feasibility" onclick="toggleSubcard(${idx},'feasibility',this)"><span class="icon">✅</span> Feasible: <b>${m.feasible_pct}%</b><span class="chev">▼</span></div>
+            <div class="metric-pill distance" onclick="toggleSubcard(${idx},'distance',this)"><span class="icon">🛣️</span> Jarak: <b>${m.avg_distance_km} km/run</b><span class="chev">▼</span></div>
+            <div class="metric-pill speed" onclick="toggleSubcard(${idx},'speed',this)"><span class="icon">💨</span> Kecepatan: <b>${m.avg_speed_kph} km/jam</b><span class="chev">▼</span></div>
+            <div class="metric-pill spatial" onclick="toggleSubcard(${idx},'spatial',this)"><span class="icon">🎯</span> Efisiensi: <b>${m.spatial_eff} titik/km</b><span class="chev">▼</span></div>
+            <div class="metric-pill serviceratio" onclick="toggleSubcard(${idx},'serviceratio',this)"><span class="icon">🧰</span> Rasio Layanan: <b>${m.service_ratio_pct}%</b><span class="chev">▼</span></div>
+            <div class="metric-pill timeutil" onclick="toggleSubcard(${idx},'timeutil',this)"><span class="icon">⏱️</span> Utilisasi: <b>${m.time_util_pct}%</b><span class="chev">▼</span></div>
           </div>
           <div class="subcard-panel" id="subcard-${idx}"><div class="subcard-inner" id="subcard-inner-${idx}"></div></div>
         </div>
@@ -1099,18 +1161,14 @@ function renderDashboard(){
 
   /* ── Multi-metric charts ── */
   let htmlMulti = `<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px">
-      <h2>📈 Analisis Multimetrik</h2>
-      <div class="chart-selector-wrapper">
-        <button class="chart-btn ${activeMetricView==='coverage'?'active':''}" data-metric="coverage" onclick="switchMetricView('coverage')">🎯 Coverage (Titik)</button>
-        <button class="chart-btn ${activeMetricView==='distance'?'active':''}" data-metric="distance" onclick="switchMetricView('distance')">🛣️ Jarak (Kilometer)</button>
-        <button class="chart-btn ${activeMetricView==='time'?'active':''}" data-metric="time" onclick="switchMetricView('time')">⏱️ Waktu (Menit)</button>
-      </div>
+    <div style="margin-bottom:8px"><h2>📈 Analisis Multimetrik</h2></div>
+    <div class="chart-selector-wrapper">
+      ${Object.entries(METRICS).map(([k,mt]) => `<button class="chart-btn ${activeMetricView===k?'active':''}" data-metric="${k}" onclick="switchMetricView('${k}')">${mt.label}</button>`).join('')}
     </div>
-    <div class="sub">Kiri: konvergensi objektif (titik/shift, best-so-far) selama pencarian. Kanan: metrik per iterasi training (1..N). Arahkan kursor ke titik untuk nilai detail.</div>
+    <div class="sub">Pilih metrik apa saja. Kiri: konvergensi best-so-far selama pencarian (hanya Coverage/Jarak/Total Waktu yang dioptimasi langsung). Kanan: tren metrik per iterasi (1..N), semua model — klik legenda untuk sembunyikan/tampilkan, arahkan kursor untuk nilai.</div>
     <div class="charts-layout">
       <div class="chart-box">
-        <div class="chart-title" id="titleConv">🎯 Kurva Konvergensi</div>
+        <div class="chart-title" id="titleConv">📉 Konvergensi</div>
         <div id="chartConv"></div>
       </div>
       <div class="chart-box">
@@ -1121,6 +1179,14 @@ function renderDashboard(){
   </div>`;
 
   /* ── Comparison table (sortable) ── */
+  /* Flatten jarak & waktu rata-rata per kendaraan (motor/mobil) ke properti model */
+  M.forEach(m => {
+    const bv = m.by_vehicle || {};
+    m.dist_motor = bv.motor ? bv.motor.distance_km : null;
+    m.dist_mobil = bv.mobil ? bv.mobil.distance_km : null;
+    m.time_motor = bv.motor ? bv.motor.total_min  : null;
+    m.time_mobil = bv.mobil ? bv.mobil.total_min  : null;
+  });
   const cmpCols = [
     {label:'Model', key:'display_name', kind:'txt'},
     {label:'Coverage', key:'coverage_avg', kind:'max'},
@@ -1129,24 +1195,30 @@ function renderDashboard(){
     {label:'Konsistensi', key:'consistency_pct', kind:'max', suf:'%'},
     {label:'Success', key:'success_rate_pct', kind:'plain', suf:'%'},
     {label:'Titik/jam', key:'throughput', kind:'max'},
+    {label:'Titik/km', key:'spatial_eff', kind:'max'},
     {label:'Runtime', key:'avg_runtime_ms', kind:'min', suf:' ms'},
+    {label:'🛣️ Jarak Motor', key:'dist_motor', kind:'plain', suf:' km'},
+    {label:'🛣️ Jarak Mobil', key:'dist_mobil', kind:'plain', suf:' km'},
+    {label:'⏱️ Waktu Motor', key:'time_motor', kind:'plain', suf:' mnt'},
+    {label:'⏱️ Waktu Mobil', key:'time_mobil', kind:'plain', suf:' mnt'},
     {label:'Feasible', key:'feasible_pct', kind:'plain', suf:'%'},
     {label:'Skor', key:'overall_score', kind:'max', bold:true},
   ];
   let htmlCmp = `<div class="card">
     <h2>📋 Tabel Perbandingan Lengkap</h2>
-    <div class="sub">Semua indikator objektif per model — klik header untuk mengurutkan</div>
-    <div class="table-card"><table class="cmp" id="cmpTable"><thead><tr>` +
+    <div class="sub">Semua indikator objektif per model (termasuk rata-rata jarak &amp; waktu per kendaraan motor/mobil) — klik header untuk mengurutkan</div>
+    <div class="table-card" style="overflow-x:auto"><table class="cmp" id="cmpTable"><thead><tr>` +
     cmpCols.map((c,i) => `<th class="sortable" onclick="sortCmpTable(${i})" data-key="${c.key}" data-kind="${c.kind}">${c.label}<span class="arr">▼</span></th>`).join('') +
     `</tr></thead><tbody>`;
   const bestOf = k => Math.max(...M.map(m => m[k]));
   const minOf  = k => Math.min(...M.map(m => m[k]));
   const fmtCell = (m, c) => {
     const v = m[c.key];
+    if (c.kind==='txt') return `<td><b>${m.icon} ${m.display_name}</b></td>`;
+    if (v==null) return `<td data-v="0">—</td>`;
     let cls = '';
     if (c.kind==='max' && v===bestOf(c.key)) cls='best';
     if (c.kind==='min' && v===minOf(c.key)) cls='best';
-    if (c.kind==='txt') return `<td><b>${m.icon} ${m.display_name}</b></td>`;
     const inner = (c.bold? `<b>${v}${c.suf||''}</b>` : `${v}${c.suf||''}`);
     return `<td class="${cls}" data-v="${v}">${inner}</td>`;
   };
@@ -1195,75 +1267,35 @@ function drawSelectedCharts(){
     series.filter(s => !hiddenModels.has(s.name)),
     Object.assign({legendAll: ALL, hidden: hiddenModels, toggle: 'toggleSeries'}, opts));
 
-  if (activeMetricView === 'distance') {
-    if (titleConv) titleConv.innerHTML = '🛣️ Kurva Travel Time selama Pencarian (mnt)';
-    if (titleIter) titleIter.innerHTML = '🛣️ Jarak Tempuh per Iterasi (km)';
+  const meta = METRICS[activeMetricView] || METRICS.coverage;
 
-    /* Convergence: travel_min from convergence frames (real data) */
-    const convSeries = M.filter(m => (m.convergence||[]).some(c => c.travel_min != null && c.travel_min > 0))
-      .map(m => ({ name: m.display_name, color: m.color,
-        points: m.convergence.map(c => ({x: c.progress, y: c.travel_min||0})) }));
+  /* Kanan: tren metrik per iterasi (semua model) */
+  if (titleIter) titleIter.innerHTML = `📊 ${meta.label} per Iterasi (${meta.unit})`;
+  const iterSeries = M.map(m => ({ name: m.display_name, color: m.color,
+    points: (m.per_iter_detail||[]).map(d => ({x: d.iter, y: d[meta.iter]||0})) }));
+  LC(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:meta.unit});
+
+  /* Kiri: konvergensi best-so-far — hanya untuk metrik yang dioptimasi langsung */
+  if (meta.conv) {
+    const unit = meta.conv==='visited' ? 'titik' : 'mnt';
+    const arah = meta.max ? 'maksimasi ↑' : 'minimasi ↓';
+    if (titleConv) titleConv.innerHTML = `📉 Konvergensi ${meta.label} (best-so-far, ${arah})`;
+    const fn = meta.max ? bestSoFar : bestSoFarMin;
+    const convSeries = M.filter(m => (m.convergence||[]).length).map(m => ({
+      name: m.display_name, color: m.color,
+      points: fn(m.convergence.map(c => ({x: c.progress, y: c[meta.conv]||0}))) }));
     if (convSeries.length) {
-      LC(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:'mnt'});
+      LC(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:unit});
     } else {
-      hostConv.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data travel_min tidak tersedia</div>';
+      hostConv.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data konvergensi tidak tersedia</div>';
     }
-
-    /* Iter: distance_km from per_iter_detail (real data) */
-    const iterSeries = M.filter(m => (m.per_iter_detail||[]).some(d => d.distance_km > 0))
-      .map(m => ({ name: m.display_name, color: m.color,
-        points: m.per_iter_detail.map(d => ({x: d.iter, y: d.distance_km})) }));
-    if (iterSeries.length) {
-      LC(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'km'});
-    } else {
-      hostIter.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data jarak tidak tersedia</div>';
-    }
-
-  } else if (activeMetricView === 'time') {
-    if (titleConv) titleConv.innerHTML = '⏱️ Kurva Total Waktu selama Pencarian (mnt)';
-    if (titleIter) titleIter.innerHTML = '⏱️ Runtime Komputasi per Iterasi (ms)';
-
-    /* Convergence: total_min from convergence frames (real data) */
-    const convSeries = M.filter(m => (m.convergence||[]).some(c => c.total_min != null && c.total_min > 0))
-      .map(m => ({ name: m.display_name, color: m.color,
-        points: m.convergence.map(c => ({x: c.progress, y: c.total_min||0})) }));
-    if (convSeries.length) {
-      LC(hostConv, convSeries, {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:'mnt'});
-    } else {
-      hostConv.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:var(--muted)">Data total_min tidak tersedia</div>';
-    }
-
-    /* Iter: runtime_ms from per_iter_detail (real data) */
-    const iterSeries = M.filter(m => (m.per_iter_detail||[]).length)
-      .map(m => ({ name: m.display_name, color: m.color,
-        points: m.per_iter_detail.map(d => ({x: d.iter, y: d.runtime_ms})) }));
-    if (iterSeries.length) {
-      LC(hostIter, iterSeries, {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'ms'});
-    } else {
-      LC(hostIter,
-        M.map(m => ({ name: m.display_name, color: m.color,
-          points: m.per_iteration.map((v,i) => ({x: i+1, y: parseFloat(m.avg_runtime_ms)||0})) })),
-        {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'ms'});
-    }
-
   } else {
-    /* Coverage (default) — real data; objektif = titik/shift (best-so-far) */
-    if (titleConv) titleConv.innerHTML = '🎯 Konvergensi Objektif (titik/shift)';
-    if (titleIter) titleIter.innerHTML = '🎯 Coverage per Iterasi (titik)';
-
-    LC(hostConv,
-      M.filter(m => m.convergence && m.convergence.length).map(m => ({
-        name: m.display_name, color: m.color,
-        points: bestSoFar(m.convergence.map(c => ({x: c.progress, y: c.visited})))
-      })), {xmin:0, xmax:100, xlabel:'Progres Pencarian (%)', xname:'progres', unit:'titik'});
-
-    const iterSeries = M.filter(m => (m.per_iter_detail||[]).length)
-      .map(m => ({ name: m.display_name, color: m.color,
-        points: m.per_iter_detail.map(d => ({x: d.iter, y: d.coverage})) }));
-    LC(hostIter,
-      iterSeries.length ? iterSeries : M.map(m => ({ name: m.display_name, color: m.color,
-        points: m.per_iteration.map((v,i) => ({x: i+1, y: v})) })),
-      {xmin:1, xmax: Math.max(2, D.n_iterations), xlabel:'Iterasi', xname:'iter', unit:'titik'});
+    if (titleConv) titleConv.innerHTML = '📉 Konvergensi (tidak tersedia)';
+    hostConv.innerHTML = `<div style="padding:26px;text-align:center;font-size:12px;color:var(--muted);line-height:1.7">
+      Konvergensi per-generasi hanya untuk metrik yang <b>dioptimasi langsung</b> saat pencarian:
+      <b>Coverage</b> (titik), <b>Jarak</b> (travel time) &amp; <b>Total Waktu</b>.<br>
+      <b>${meta.label}</b> adalah metrik turunan — lihat trennya antar iterasi di panel kanan,
+      atau buka sub-card <b>${meta.label}</b> di Leaderboard untuk timeline + ringkasan.</div>`;
   }
 }
 

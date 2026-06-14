@@ -121,7 +121,7 @@ class Settings:
     SHIFT_SECONDS       = 6 * 3600  # 1 shift = 6 jam jam kerja
     N_SHIFTS            = 2         # 2 shift per kendaraan (6 jam + 6 jam)
     TRAINING_ITERATIONS = 10        # tiap model dijalankan 10x per kendaraan
-    MIN_POINTS_TARGET   = 55        # target minimum titik per kendaraan (2 shift)
+    MIN_POINTS_TARGET   = 55        # target per kendaraan/hari (2 veh × 55 = 110 total)
 
     # Armada default dalam satu training. Jumlah kendaraan = variabel insight.
     # Titik distinct lintas-kendaraan & lintas-shift (no-overlap).

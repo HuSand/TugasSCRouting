@@ -1,8 +1,11 @@
 # Surabaya Routing Platform
 
-Platform Python untuk mengambil data jalan dan fasilitas publik dari OpenStreetMap, membangun skenario rute multi-stop di Surabaya, lalu membandingkan beberapa algoritma routing pada skenario yang sama.
+Platform Python untuk mengambil data jalan dan fasilitas publik dari OpenStreetMap di Surabaya, lalu menyelesaikan dua jenis persoalan routing:
 
-Dokumentasi ini menjelaskan alur lengkap dari instalasi, ekstraksi data, eksplorasi, benchmark algoritma, sampai visualisasi hasil.
+1. **TSP / multi-stop benchmark** (`compare`) — membandingkan beberapa algoritma routing pada skenario circuit yang sama (minimasi waktu tempuh).
+2. **Team Orienteering Problem / TOP** (`train`) — **deliverable utama**: memaksimalkan jumlah fasilitas publik yang dikunjungi oleh armada multi-vehicle (motor + mobil) dalam batas dua shift kerja, dengan constraint lebar jalan dan no-overlap.
+
+Dokumentasi ini menjelaskan alur lengkap dari instalasi, ekstraksi data, eksplorasi, benchmark algoritma (TSP), training TOP, sampai visualisasi hasil.
 
 ---
 
@@ -26,23 +29,32 @@ Dokumentasi ini menjelaskan alur lengkap dari instalasi, ekstraksi data, eksplor
 
 ## 1. Ringkasan Sistem
 
-Project ini dipakai untuk membandingkan algoritma routing pada jaringan jalan nyata Surabaya.
+Project ini menyelesaikan persoalan routing pada jaringan jalan nyata Surabaya.
 
 Sistem melakukan hal berikut:
 
-1. Mengambil data fasilitas publik dari OpenStreetMap.
-2. Mengambil jaringan jalan Surabaya dari OpenStreetMap.
-3. Menghubungkan setiap fasilitas ke node jalan terdekat.
-4. Membuat skenario routing multi-stop.
-5. Menjalankan beberapa algoritma pada skenario yang sama.
-6. Menghasilkan tabel, grafik, peta interaktif, dan viewer evolusi algoritma.
+1. Mengambil data fasilitas publik dan jaringan jalan dari OpenStreetMap.
+2. Menghubungkan setiap fasilitas ke node jalan terdekat.
+3. **Mode TSP (`compare`)**: membuat skenario routing multi-stop, menjalankan beberapa algoritma pada skenario yang sama, dan menghasilkan tabel, grafik, peta, dan viewer evolusi.
+4. **Mode TOP (`train`)**: membangun pool kandidat 120 titik, lalu mengoptimasi rute armada multi-vehicle untuk memaksimalkan jumlah titik dikunjungi per shift.
 
-Fokus benchmark saat ini adalah rute berbentuk circuit atau patroli:
+### Mode TSP (benchmark)
+
+Fokus benchmark berbentuk circuit atau patroli (keduanya `round_trip=True`):
 
 - `emergency_patrol_circuit`: pos polisi dan pemadam kebakaran.
 - `terminal_circuit`: terminal bus, terminal feri, dan SPBU.
 
-Kedua skenario menggunakan `round_trip=True`, artinya rute kembali lagi ke titik awal.
+### Mode TOP (training — deliverable utama)
+
+Objektif TOP adalah **memaksimalkan jumlah fasilitas distinct** yang dikunjungi dari depot kembali ke depot, di bawah batas jam kerja shift. Constraint yang ditegakkan:
+
+- **Lebar jalan** — edge dengan lebar <= lebar kendaraan tidak bisa dilewati (motor 0.8 m vs mobil 1.8 m), diterapkan sebagai filter graf (`src/routing/width.py`).
+- **Service time** — +10 menit per titik yang dikunjungi.
+- **Budget shift** — `travel_time + service_time <= 6 jam` per shift, 2 shift per kendaraan.
+- **No-overlap** — titik yang sudah dikunjungi (shift lain / kendaraan lain) tidak boleh dikunjungi ulang.
+
+Armada default: 1 motor + 1 mobil. Target: `MIN_POINTS_TARGET` (55) titik per kendaraan per hari. Jika target tak tercapai, modul **insight** menganalisis kondisi (kecepatan, service time, durasi shift, ukuran armada) yang dibutuhkan untuk mencapainya.
 
 ---
 
@@ -109,10 +121,13 @@ Menu utama berisi:
 | `1` | Extract fasilitas dan jaringan jalan dari OpenStreetMap |
 | `2` | Explore dan profil data |
 | `3` | Demo routing dasar |
-| `4` | Benchmark semua algoritma |
-| `5` | Jalankan semua pipeline |
-| `7` | Benchmark dengan parallel legs |
-| `8` | Buka `evolution_viewer.html` |
+| `4` | Benchmark semua algoritma (TSP) |
+| `7` | Benchmark dengan parallel legs (max CPU) |
+| `8` | **TOP training — maximise points visited (MAIN DELIVERABLE)** |
+| `9` | Buka Route Viewer + Insight (jalankan `8` dulu) |
+| `5` | Jalankan full pipeline (1 → 2 → 3 → 4 → 8) |
+| `6` | Buka GA Evolution Viewer (jalankan `4` dulu) |
+| `0` | Keluar |
 
 ### Opsi 2 - Terminal
 
@@ -122,8 +137,20 @@ python main.py explore
 python main.py demo
 python main.py compare
 python main.py compare --parallel-legs
+python main.py train
+python main.py train --vehicle mobil
+python main.py train --iterations 2
 python main.py all
 ```
+
+Flag tambahan:
+
+| Flag | Berlaku untuk | Fungsi |
+|---|---|---|
+| `--parallel-legs` | `compare` | Paralelisasi per leg, pakai lebih banyak core CPU |
+| `--vehicle motor\|mobil` | `train` | Pilih jenis kendaraan (default: motor) |
+| `--iterations N` | `train` | Jumlah iterasi training per model per kendaraan (default 10) |
+| `--no-log-file` | semua | Nonaktifkan penulisan log ke file |
 
 Urutan yang disarankan untuk pertama kali:
 
@@ -247,7 +274,38 @@ python main.py compare --parallel-legs
 
 Mode ini memecah pekerjaan per leg agar lebih banyak core CPU terpakai. Biasanya lebih cepat, tetapi bisa memakai RAM lebih besar.
 
-### 5.5 All
+### 5.5 Train (TOP — deliverable utama)
+
+Command:
+
+```bash
+python main.py train
+python main.py train --vehicle mobil
+python main.py train --iterations 2
+```
+
+Tahap ini menjalankan `src/routing/training.py`.
+
+Yang dilakukan:
+
+1. Load graph jalan dan fasilitas, bangun **pool kandidat 120 titik** (60 emergency + 60 transport) yang tersebar merata via farthest-point sampling.
+2. Untuk tiap kendaraan (motor, mobil), bangun graf terfilter lebar jalan (`width.py`) lalu precompute pair-cost matrix sekali.
+3. Untuk tiap shift (2 × 6 jam), jalankan keempat model TOP (GA, ACO Elite Pro, SA, PSO) sebanyak 10 iterasi, ambil solusi terbaik (jumlah titik terbanyak).
+4. Terapkan constraint service time, budget shift, dan no-overlap lintas shift/kendaraan.
+5. Jika target `MIN_POINTS_TARGET` tak tercapai, jalankan insight analysis (`insight.py`).
+6. Bangun route viewer turn-by-turn (`route_viewer.py`).
+
+Output utama:
+
+| File | Fungsi |
+|---|---|
+| `data/training_results.csv` | Hasil mentah per kendaraan/shift/model/iterasi |
+| `data/training_summary.csv` | Ringkasan jumlah titik dikunjungi per kendaraan |
+| `data/training_log.json` | Rute, pool, dan dashboard performa untuk viewer |
+| `data/route_viewer.html` | Viewer Google-Maps-style: dropdown kendaraan/shift/stop + nama jalan |
+| `data/insight_report.txt` | Analisis kondisi yang dibutuhkan untuk mencapai target |
+
+### 5.6 All
 
 Command:
 
@@ -258,7 +316,7 @@ python main.py all
 Menjalankan pipeline lengkap:
 
 ```text
-extract -> explore -> demo -> compare
+extract -> explore -> demo -> compare -> train
 ```
 
 Gunakan ini jika ingin membangun ulang seluruh hasil dari awal.
@@ -313,10 +371,12 @@ Algoritma yang aktif didaftarkan di `run_platform()` dalam `src/routing/benchmar
 
 | Nama di hasil | Class | Peran |
 |---|---|---|
-| `ga` | `GeneticAlgorithm` | GA untuk path point-to-point dan TSP-GA untuk multi-stop |
-| `aco_routing` | `AntColonyRouting` | Ant Colony Optimization untuk mencari path antar dua node |
-| `gerald_sa` | `GeraldSimulatedAnnealing` | Simulated Annealing untuk optimasi path |
-| `particle_swarm` | `ParticleSwarmRouting` | Particle Swarm Optimization untuk optimasi path |
+| `ga` | `GeneticAlgorithm` | GA untuk path point-to-point, TSP-GA multi-stop, dan TOP |
+| `aco_elite_pro` | `AntColonyElitePro` | ACO (MMAS + rank-based deposit + Or-opt) untuk TSP dan TOP |
+| `gerald_sa` | `GeraldSimulatedAnnealing` | Simulated Annealing untuk optimasi path dan TOP |
+| `particle_swarm` | `ParticleSwarmRouting` | Particle Swarm Optimization untuk optimasi path dan TOP |
+
+Keempat algoritma ini dipakai di **kedua mode**. Untuk mode TOP, masing-masing mengimplementasikan `solve_orienteering()` yang mendelegasikan ke engine bersama `src/routing/orienteering.py` (`ga_orienteering`, `aco_orienteering`, `sa_orienteering`, `pso_orienteering`). Class lain (`AntColonyRouting`, `AntColonyElite`, `AntColonyPrime`, `Dijkstra*`, `AStar*`, `Christofides`) tersedia di `algorithms.py` tetapi default-nya tidak diaktifkan.
 
 Setiap algoritma mengembalikan `RouteResult` yang berisi:
 
@@ -467,6 +527,22 @@ Fitur utama:
 - Lihat kandidat rute dan best-so-far.
 - Bandingkan overlay beberapa algoritma jika data tersedia.
 
+### 9.5 Output Train (TOP)
+
+Setelah menjalankan `python main.py train`, buka:
+
+```text
+data/route_viewer.html
+```
+
+Viewer ini menampilkan rute hasil TOP dengan gaya Google Maps:
+
+- Dropdown pilih kendaraan (motor / mobil), shift, dan stop.
+- Turn-by-turn dengan nama jalan tiap leg.
+- Dashboard performa per model dan jumlah titik dikunjungi.
+
+Ringkasan numerik ada di `data/training_summary.csv` (jumlah titik per kendaraan/shift), dan analisis pencapaian target di `data/insight_report.txt`.
+
 ---
 
 ## 10. Konfigurasi
@@ -500,7 +576,35 @@ Penjelasan:
 | `OSM_TIMEOUT` | Batas waktu query Overpass |
 | `OSM_USE_CACHE` | Menggunakan cache agar rerun lebih cepat |
 | `N_COVERAGE_SAMPLES` | Jumlah titik acak untuk demo coverage |
-| `MAX_FACILITIES_PER_CAT` | Batas jumlah fasilitas per kategori |
+| `MAX_FACILITIES_PER_CAT` | Batas jumlah fasilitas per kategori (mode TSP) |
+
+### Konfigurasi Team Orienteering Problem (TOP)
+
+Bagian khusus mode `train` di `settings.py`:
+
+```python
+SERVICE_TIME_S      = 600        # 10 menit per titik (waktu cek fasilitas)
+SHIFT_SECONDS       = 6 * 3600   # 1 shift = 6 jam
+N_SHIFTS            = 2          # 2 shift per kendaraan
+TRAINING_ITERATIONS = 10         # tiap model dijalankan 10x per kendaraan
+MIN_POINTS_TARGET   = 55         # target titik per kendaraan/hari
+FLEET               = {"motor": 1, "mobil": 1}   # armada default
+DEPOT_NODE          = 9156956728 # depot start/return (Polda Jatim)
+WIDTH_MISSING_PASSABLE = True    # edge tanpa data lebar dianggap bisa dilewati
+```
+
+| Setting | Fungsi |
+|---|---|
+| `SERVICE_TIME_S` | Waktu berhenti per titik (detik) |
+| `SHIFT_SECONDS` | Budget waktu satu shift (detik) |
+| `N_SHIFTS` | Jumlah shift per kendaraan |
+| `TRAINING_ITERATIONS` | Iterasi stokastik per model per kendaraan |
+| `MIN_POINTS_TARGET` | Target jumlah titik per kendaraan per hari (KPI) |
+| `FLEET` | Komposisi armada (jenis dan jumlah kendaraan) |
+| `VEHICLE_TYPES` | Lebar fisik & kecepatan tiap kendaraan (motor 0.8 m, mobil 1.8 m) |
+| `POOL_GROUPS` | Definisi pool kandidat (60 emergency + 60 transport) |
+| `DEPOT_NODE` | Node depot tempat semua rute mulai & berakhir |
+| `WIDTH_MISSING_PASSABLE` | Perlakuan edge tanpa atribut lebar jalan |
 
 Jika mengganti kota atau area, jalankan ulang:
 
@@ -530,11 +634,17 @@ TugasSCRouting/
 |   |
 |   |-- routing/
 |       |-- base.py
-|       |-- algorithms.py
-|       |-- benchmark.py
-|       |-- demos.py
-|       |-- visualize.py
-|       |-- evolve_viz.py
+|       |-- algorithms.py        # GA, SA, PSO, ACO (TSP + TOP)
+|       |-- orienteering.py      # engine Team Orienteering Problem (TOP)
+|       |-- training.py          # pipeline train (multi-vehicle, 2 shift)
+|       |-- insight.py           # insight analysis pencapaian target
+|       |-- width.py             # filter graf berdasarkan lebar jalan
+|       |-- fuel.py              # constraint range bahan bakar
+|       |-- benchmark.py         # registry, skenario, runner benchmark (TSP)
+|       |-- demos.py             # demo routing dasar
+|       |-- visualize.py         # peta dan chart hasil benchmark
+|       |-- evolve_viz.py        # viewer evolusi generasi
+|       |-- route_viewer.py      # generator route_viewer.html (TOP)
 |
 |-- data/
 |   |-- road_network.graphml
@@ -542,12 +652,17 @@ TugasSCRouting/
 |   |-- road_network_edges.geojson
 |   |-- facilities_with_network.geojson
 |   |-- facilities_with_network.csv
-|   |-- comparison_results.csv
+|   |-- comparison_results.csv        # output TSP (compare)
 |   |-- comparison_summary.csv
-|   |-- comparison_chart.png
 |   |-- comparison_map_*.html
 |   |-- evolution_viewer.html
+|   |-- training_results.csv          # output TOP (train)
+|   |-- training_summary.csv
+|   |-- training_log.json
+|   |-- route_viewer.html
+|   |-- insight_report.txt
 |
+|-- docs/                             # dokumentasi laporan & tabel data
 |-- logs/
 |   |-- run_*.log
 |   |-- evolution_*.txt
@@ -560,15 +675,21 @@ Penjelasan file utama:
 | File | Fungsi |
 |---|---|
 | `main.py` | Entry point command line |
-| `settings.py` | Konfigurasi project |
+| `settings.py` | Konfigurasi project (TSP + TOP) |
 | `src/extract.py` | Download dan proses data OSM |
 | `src/explore.py` | Profil data dan peta fasilitas |
 | `src/routing/base.py` | Dataclass dan kontrak algoritma |
-| `src/routing/algorithms.py` | Implementasi semua algoritma |
-| `src/routing/benchmark.py` | Registry, skenario, runner benchmark |
+| `src/routing/algorithms.py` | Implementasi semua algoritma (TSP + TOP) |
+| `src/routing/orienteering.py` | Engine TOP bersama (problem, solver, repair, result) |
+| `src/routing/training.py` | Pipeline training multi-vehicle TOP |
+| `src/routing/insight.py` | Analisis faktor pencapaian target |
+| `src/routing/width.py` | Filter graf per lebar jalan kendaraan |
+| `src/routing/fuel.py` | Constraint range bahan bakar |
+| `src/routing/benchmark.py` | Registry, skenario, runner benchmark TSP |
 | `src/routing/demos.py` | Demo routing dasar |
 | `src/routing/visualize.py` | Peta dan chart hasil benchmark |
 | `src/routing/evolve_viz.py` | Viewer evolusi generasi |
+| `src/routing/route_viewer.py` | Generator route viewer turn-by-turn TOP |
 
 ---
 
@@ -735,9 +856,10 @@ python main.py extract
 python main.py explore
 python main.py demo
 python main.py compare
+python main.py train
 ```
 
-Untuk melihat hasil:
+Untuk melihat hasil TSP (compare):
 
 ```text
 data/comparison_results.csv
@@ -745,6 +867,15 @@ data/comparison_summary.csv
 data/comparison_chart.png
 data/comparison_map_*.html
 data/evolution_viewer.html
+```
+
+Untuk melihat hasil TOP (train):
+
+```text
+data/training_summary.csv
+data/training_results.csv
+data/route_viewer.html
+data/insight_report.txt
 ```
 
 Untuk mengubah model:

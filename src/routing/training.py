@@ -285,8 +285,8 @@ def run_multi_vehicle_training(cfg):
     # Selalu dihitung — dipakai untuk dashboard (Feasibility Roadmap) & txt report.
     from src.routing.insight import (compute_feasibility_conditions,
                                      generate_insight_report)
-    feasibility = compute_feasibility_conditions(cfg, base_problems, summary)
-    generate_insight_report(cfg, base_problems, summary, data=feasibility)
+    feasibility = compute_feasibility_conditions(cfg, summary, df)
+    generate_insight_report(cfg, feasibility)
 
     # ── Training log JSON (untuk viewer) ─────────────────────
     _write_training_log(cfg, best_run, depot, coords, labels, node_cat, df,
@@ -424,7 +424,11 @@ def _build_dashboard(cfg, df: pd.DataFrame, best_run: dict) -> dict:
     for name, g in runs.groupby("model"):
         cov          = g["total_visited"].astype(float)
         coverage_avg = float(cov.mean())
-        coverage_std = float(cov.std(ddof=0))
+        # Std ANTAR ITERASI (variasi run-to-run), bukan antar-kendaraan.
+        # cov mencampur motor (≈56) & mobil (≈49) → std-nya akan menangkap selisih
+        # kendaraan, bukan kestabilan antar run. Pakai rata-rata coverage per iterasi.
+        _cov_per_iter = g.groupby("iteration")["total_visited"].mean()
+        coverage_std = float(_cov_per_iter.std(ddof=0))
         consistency  = max(0.0, min(100.0,
                        (1 - (coverage_std / coverage_avg if coverage_avg else 1)) * 100))
         sub          = df[df["model"] == name]
@@ -611,9 +615,9 @@ def _dashboard_insights(models, df: pd.DataFrame, target: int) -> list:
     out.append(f"🏆 <b>{top['display_name']}</b> memimpin leaderboard (skor {top['overall_score']}) "
                f"dengan rata-rata <b>{top['coverage_avg']} titik/kendaraan</b> "
                f"— {top['target_attainment_pct']}% dari target {target}.")
-    mc = max(models, key=lambda m: m["consistency_pct"])
+    mc = min(models, key=lambda m: m["coverage_std"])
     out.append(f"🎯 Paling stabil antar 10 iterasi: <b>{mc['display_name']}</b> "
-               f"(konsistensi {mc['consistency_pct']}%, deviasi cuma {mc['coverage_std']} titik).")
+               f"(std cuma <b>{mc['coverage_std']} titik</b> — makin kecil makin konsisten).")
     fast = min(models, key=lambda m: m["avg_runtime_ms"])
     out.append(f"⚡ Komputasi tercepat: <b>{fast['display_name']}</b> "
                f"({fast['avg_runtime_ms']} ms per shift).")
@@ -649,8 +653,8 @@ def _metric_guide(target: int) -> list:
          "desc": f"Objektif UTAMA: rata-rata titik unik yang dikunjungi satu kendaraan dalam 2 shift. Makin tinggi makin baik (target {target})."},
         {"label": "Pencapaian Target",
          "desc": f"Persentase coverage terhadap target {target} titik/kendaraan."},
-        {"label": "Konsistensi",
-         "desc": "Kestabilan hasil antar 10 iterasi — 100% berarti nyaris tanpa variasi."},
+        {"label": "Std (Stabilitas)",
+         "desc": "Standar deviasi jumlah titik antar 10 iterasi. Makin KECIL makin stabil/konsisten (0 = identik tiap run)."},
         {"label": "Success Rate",
          "desc": "Persentase run yang mencapai/melebihi target."},
         {"label": "Efisiensi (titik/jam)",

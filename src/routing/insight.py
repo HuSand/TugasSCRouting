@@ -15,6 +15,7 @@ men-skala cost matrix yang sudah ada. Jadi sweep banyak skenario tetap ringan.
 """
 
 import logging
+import math
 from datetime import datetime
 
 from src.routing.orienteering import OrienteeringProblem, _greedy_order
@@ -57,133 +58,99 @@ def _sim_fleet_total(base, service_s, budget_s, speed_mult, n_shifts, n_vehicles
     return len(visited)
 
 
-def compute_feasibility_conditions(cfg, base_problems, summary) -> dict:
+def compute_feasibility_conditions(cfg, summary, df) -> dict:
     """
-    Analisis terstruktur: pada KONDISI APA (service time, kecepatan, jam kerja,
-    jumlah kendaraan) target titik tercapai? Mengembalikan dict siap-render untuk
-    dashboard (lihat route_viewer) — selalu dihitung, baik target tercapai maupun
-    tidak. Memakai greedy insertion (deterministik) sebagai estimasi batas kondisi.
-    """
-    target   = cfg.MIN_POINTS_TARGET
-    n_shifts = cfg.N_SHIFTS
-    base_service = cfg.SERVICE_TIME_S
-    base_budget  = cfg.SHIFT_SECONDS
+    Rekomendasi feasibility berbasis HASIL MODEL nyata (bukan greedy).
 
-    service_sweep = [600, 540, 480, 420, 360, 300, 240, 180, 120]   # 10..2 menit
-    speed_sweep   = [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
-    hours_sweep   = [6, 7, 8, 9, 10, 11, 12]
-    vehicle_sweep = list(range(1, 9))
+    Untuk tiap kendaraan yang belum mencapai target, hitung secara aritmetik
+    dari run terbaik model: pada kondisi apa target tercapai —
+      • tambah kendaraan (bagi beban armada),
+      • perpanjang shift (jam kerja), atau
+      • turunkan waktu kunjungan per titik (service time).
+    Angka diestimasi dari waktu tempuh + waktu layanan run terbaik.
+    """
+    target           = cfg.MIN_POINTS_TARGET
+    n_shifts         = cfg.N_SHIFTS
+    base_service_min = cfg.SERVICE_TIME_S / 60
+    base_shift_hours = cfg.SHIFT_SECONDS / 3600
+    budget_total_min = n_shifts * base_shift_hours * 60          # mis. 2 × 6 × 60 = 720
 
     vehicles = []
-    for vtype, base in base_problems.items():
-        vlabel = getattr(base.vehicle, "label", vtype)
-        baseline = _sim_vehicle_total(base, base_service, base_budget, 1.0, n_shifts)
-        best_col = summary[summary["vehicle"] == vtype]["best_total"]
-        best_meta = int(best_col.max()) if len(best_col) else 0
-        # Status/feasibility mengacu HASIL MODEL nyata (best_meta), bukan estimasi
-        # greedy — supaya konsisten dgn leaderboard/tabel per-shift.
-        current = best_meta
-        reached = best_meta >= target
-        greedy_meets = baseline >= target
+    for vtype, g in df.groupby("vehicle"):
+        vlabel = str(vtype).capitalize()
+        # run terbaik = (model, unit, iterasi) dengan total titik tertinggi
+        # (gabung 2 shift). WAJIB sertakan "model" — kalau tidak, visited_count
+        # ke-sum lintas semua model dan angkanya jadi salah (mis. 4×50≈200).
+        per_run = (g.groupby(["model", "vehicle_unit", "iteration"])
+                     .agg(vis=("visited_count", "sum"),
+                          travel=("travel_min", "sum"),
+                          total=("total_min", "sum"))
+                     .reset_index())
+        if per_run.empty:
+            continue
+        bestrow      = per_run.loc[per_run["vis"].idxmax()]
+        best         = int(bestrow["vis"])
+        travel_total = float(bestrow["travel"])
+        total_total  = float(bestrow["total"])
+        reached      = best >= target
+        gap          = max(0, target - best)
 
-        # Ambang tiap lever (ubah SATU faktor) — None jika tak tercapai dalam sweep
-        svc_hit = next((s for s in service_sweep
-                        if _sim_vehicle_total(base, s, base_budget, 1.0, n_shifts) >= target), None)
-        spd_hit = next((m for m in speed_sweep
-                        if _sim_vehicle_total(base, base_service, base_budget, m, n_shifts) >= target), None)
-        hrs_hit = next((h for h in hours_sweep
-                        if _sim_vehicle_total(base, base_service, h * 3600, 1.0, n_shifts) >= target), None)
+        rec = {"add_vehicles": None, "shift_hours": None, "service_min": None}
+        if not reached and best > 0:
+            # (a) Service time: agar `target` titik muat dengan waktu tempuh ± sama
+            svc_needed = (budget_total_min - travel_total) / target
+            if 0 < svc_needed < base_service_min:
+                rec["service_min"] = int(math.floor(svc_needed))
+            # (b) Shift time: perlu waktu untuk `target` titik (rata-rata waktu/titik run ini)
+            avg_per_point = total_total / best
+            shift_needed  = math.ceil(target * avg_per_point / n_shifts / 60)
+            if base_shift_hours < shift_needed <= 24:
+                rec["shift_hours"] = int(shift_needed)
+            # (c) Tambah kendaraan (bagi beban / naikkan cakupan armada)
+            rec["add_vehicles"] = 1
 
-        # Coverage armada (no-overlap) per jumlah kendaraan
-        fleet = []
-        n_fleet_needed = None
-        for nv in vehicle_sweep:
-            tot = _sim_fleet_total(base, base_service, base_budget, 1.0, n_shifts, nv)
-            meets = tot >= target
-            fleet.append({"n": nv, "unique": int(tot), "meets": meets})
-            if meets and n_fleet_needed is None:
-                n_fleet_needed = nv
-
-        thresholds = {
-            "service_min": (svc_hit / 60 if svc_hit is not None else None),
-            "speed_pct":   ((spd_hit - 1) * 100 if spd_hit is not None else None),
-            "shift_hours": (hrs_hit if hrs_hit is not None else None),
-        }
-        recommendation = {
-            "n_vehicles":  n_fleet_needed if n_fleet_needed is not None else max(vehicle_sweep),
-            "service_min": base_service / 60,
-            "shift_hours": base_budget / 3600,
-            "feasible_at_baseline": reached,
-        }
-        narrative = _feasibility_narrative(
-            vlabel, target, best_meta, int(baseline), reached, greedy_meets,
-            thresholds, n_fleet_needed, base_service / 60, base_budget / 3600)
+        narrative = _feasibility_narrative(vlabel, target, best, gap, reached, rec)
 
         vehicles.append({
-            "vehicle":     vtype,
-            "label":       vlabel,
-            "baseline":    int(baseline),       # estimasi greedy (teoretis)
-            "best_model":  best_meta,           # hasil model nyata
-            "current":     int(current),        # = best_model
-            "target":      target,
-            "status":      "TERCAPAI" if reached else "GAGAL",
-            "greedy_meets": greedy_meets,
-            "thresholds":  thresholds,
-            "fleet":       fleet,
-            "recommendation": recommendation,
-            "narrative":   narrative,
+            "vehicle":    vtype,
+            "label":      vlabel,
+            "best_model": best,
+            "target":     target,
+            "gap":        gap,
+            "status":     "TERCAPAI" if reached else "GAGAL",
+            "travel_min": round(travel_total, 1),
+            "total_min":  round(total_total, 1),
+            "budget_min": round(budget_total_min, 1),
+            "rec":        rec,
+            "narrative":  narrative,
         })
 
     return {
-        "target":      target,
-        "n_shifts":    n_shifts,
-        "base_service_min": base_service / 60,
-        "base_shift_hours": base_budget / 3600,
-        "vehicles":    vehicles,
+        "target":           target,
+        "n_shifts":         n_shifts,
+        "base_service_min": base_service_min,
+        "base_shift_hours": base_shift_hours,
+        "vehicles":         vehicles,
     }
 
 
-def _feasibility_narrative(vlabel, target, best_meta, baseline, reached,
-                           greedy_meets, thr, n_fleet, base_service_min,
-                           base_shift_hours) -> str:
-    """Kalimat rekomendasi Bahasa Indonesia dengan angka konkret.
-
-    Status mengacu hasil MODEL nyata (best_meta); greedy hanya estimasi teoretis.
-    """
+def _feasibility_narrative(vlabel, target, best, gap, reached, rec) -> str:
+    """Narasi operasional (Bahasa Indonesia) dari hasil model — tanpa greedy."""
     if reached:
-        margin = best_meta - target
-        return (f"Model terbaik {vlabel} mencapai {best_meta} titik "
-                f"(≥ target {target}, surplus {margin} titik) pada kondisi baseline "
-                f"({base_shift_hours:.0f} jam/shift, service {base_service_min:.0f} menit/titik). "
-                f"Konfigurasi 1 kendaraan sudah cukup.")
-
-    # Belum tercapai oleh model
-    if greedy_meets:
-        # Secara teori target dapat dicapai pada baseline → gap di kualitas model
-        return (f"Model terbaik {vlabel} baru {best_meta}/{target} titik, padahal estimasi "
-                f"greedy ({baseline} titik) menunjukkan target sebenarnya dapat dicapai pada "
-                f"kondisi baseline. Gap ada pada kualitas metaheuristik, bukan kapasitas waktu/"
-                f"armada — rekomendasi: tambah iterasi/tuning hyperparameter. Untuk margin aman, "
-                f"1 kendaraan (estimasi) sudah cukup.")
-
-    levers = []
-    if thr["service_min"] is not None:
-        levers.append(f"turunkan service ke ≤ {thr['service_min']:.0f} menit/titik")
-    if thr["shift_hours"] is not None:
-        levers.append(f"perpanjang shift ke ≥ {thr['shift_hours']:.0f} jam")
-    if thr["speed_pct"] is not None:
-        levers.append(f"naikkan kecepatan ~{thr['speed_pct']:.0f}%")
-    parts = [f"Model terbaik {vlabel} baru {best_meta}/{target} titik dengan 1 kendaraan "
-             f"(estimasi greedy {baseline})."]
-    if n_fleet is not None:
-        parts.append(f"Rekomendasi: gunakan {n_fleet} kendaraan {vlabel.lower()} "
-                     f"(no-overlap) untuk menutup target.")
-    if levers:
-        parts.append("Alternatif 1 kendaraan: " + ", atau ".join(levers) + ".")
-    else:
-        parts.append("Lever tunggal (service/jam/kecepatan) tak cukup sendirian — "
-                     "perlu kombinasi atau tambah armada.")
-    return " ".join(parts)
+        return (f"Model {vlabel} mencapai {best} titik (≥ target {target}). "
+                f"Sudah feasible pada kondisi sekarang — tak perlu perubahan.")
+    opts = []
+    if rec.get("add_vehicles"):
+        opts.append(f"tambah {rec['add_vehicles']} kendaraan")
+    if rec.get("shift_hours"):
+        opts.append(f"perpanjang shift ke ≥ {rec['shift_hours']} jam")
+    if rec.get("service_min"):
+        opts.append(f"turunkan waktu kunjungan ke ≤ {rec['service_min']} menit/titik")
+    body = ", ATAU ".join(opts) if opts else (
+        "perpanjang shift atau tambah kendaraan (menurunkan service saja tak cukup "
+        "karena waktu tempuh sudah dominan)")
+    return (f"Model {vlabel} baru {best}/{target} titik (kurang {gap}). "
+            f"Agar feasible: {body}.")
 
 
 def _feasibility_to_lines(data: dict) -> list:
@@ -197,46 +164,30 @@ def _feasibility_to_lines(data: dict) -> list:
     lines.append(f"Baseline shift   : {data['base_shift_hours']:.0f} jam × {data['n_shifts']} shift")
     lines.append(f"Baseline service : {data['base_service_min']:.0f} menit per titik")
     lines.append("")
-    lines.append("Catatan: angka di bawah dihitung dengan greedy insertion "
-                 "(deterministik), sebagai estimasi batas kondisi. Model "
-                 "metaheuristik (lihat training_summary.csv) bisa sedikit lebih baik.")
+    lines.append("Catatan: rekomendasi di bawah dihitung dari HASIL MODEL terbaik "
+                 "(bukan greedy) — estimasi aritmetik dari waktu tempuh + waktu layanan.")
     lines.append("")
     for v in data["vehicles"]:
-        thr = v["thresholds"]
+        r = v["rec"]
         lines.append("─" * 64)
         lines.append(f"KENDARAAN: {v['label']} ({v['vehicle']})")
-        lines.append(f"  Greedy baseline      : {v['baseline']} titik per kendaraan")
-        lines.append(f"  Model terbaik (train): {v['best_model']} titik")
-        lines.append(f"  Status target {v['target']}    : {v['status']}")
-        lines.append("")
-        lines.append(f"  REKOMENDASI: {v['narrative']}")
-        lines.append("")
-        lines.append(f"  Kondisi agar mencapai {v['target']} titik (ubah SATU faktor):")
-        lines.append("    • Service time   : "
-                     + (f"turunkan ke <= {thr['service_min']:.0f} menit/titik"
-                        if thr["service_min"] is not None else "tak cukup sendirian"))
-        lines.append("    • Kecepatan      : "
-                     + (f"naikkan ~{thr['speed_pct']:.0f}%"
-                        if thr["speed_pct"] is not None else "tak cukup sendirian"))
-        lines.append("    • Jam kerja      : "
-                     + (f"perpanjang shift ke >= {thr['shift_hours']:.0f} jam"
-                        if thr["shift_hours"] is not None else "tak cukup sendirian"))
-        lines.append("")
-        lines.append(f"  Coverage ARMADA (total titik unik vs jumlah kendaraan {v['vehicle']}):")
-        for f in v["fleet"]:
-            mark = "  <-- >= target" if f["meets"] else ""
-            lines.append(f"    {f['n']} kendaraan : {f['unique']} titik unik{mark}")
+        lines.append(f"  Model terbaik : {v['best_model']} titik (target {v['target']})")
+        lines.append(f"  Status        : {v['status']}")
+        lines.append(f"  REKOMENDASI   : {v['narrative']}")
+        if v["status"] != "TERCAPAI":
+            lines.append("  Pilih salah satu (estimasi dari hasil model):")
+            lines.append("    • Tambah kendaraan : "
+                         + (f"+{r['add_vehicles']} unit" if r["add_vehicles"] else "-"))
+            lines.append("    • Perpanjang shift : "
+                         + (f">= {r['shift_hours']} jam" if r["shift_hours"] else "-"))
+            lines.append("    • Service/titik     : "
+                         + (f"<= {r['service_min']} menit" if r["service_min"] else "-"))
         lines.append("")
     return lines
 
 
-def generate_insight_report(cfg, base_problems, summary, data=None):
-    """
-    Tulis data/insight_report.txt dari hasil compute_feasibility_conditions.
-    `data` boleh dilewatkan agar tak menghitung ulang.
-    """
-    if data is None:
-        data = compute_feasibility_conditions(cfg, base_problems, summary)
+def generate_insight_report(cfg, data):
+    """Tulis data/insight_report.txt dari hasil compute_feasibility_conditions."""
     out = cfg.DATA_DIR / "insight_report.txt"
     out.write_text("\n".join(_feasibility_to_lines(data)), encoding="utf-8")
     log.info(f"Saved -> {out.name}")

@@ -184,6 +184,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .lb-card > div:last-child{padding-left:16px;min-width:140px;max-width:180px}
   .lb-main{display:flex;flex-direction:column;gap:14px}
   .lb-section{background:#f8fafc;border:1px solid rgba(226,232,240,.9);border-radius:18px;padding:18px}
+  .lb-std{font-size:11.5px;color:var(--muted);font-weight:600;margin:-6px 0 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .lb-std b{color:var(--ink);font-weight:800}
   .metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(208px,1fr));gap:10px;margin-top:14px}
   .metric-pill{display:flex;align-items:center;gap:9px;padding:12px 14px;border-radius:14px;color:#fff;font-size:12.5px;font-weight:700;box-shadow:0 10px 24px rgba(15,23,42,.08)}
   .metric-pill span.icon{font-size:14px}
@@ -196,6 +198,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .metric-pill.spatial{background:linear-gradient(135deg,#b45309,#d97706)}
   .metric-pill.serviceratio{background:linear-gradient(135deg,#0f766e,#0d9488)}
   .metric-pill.timeutil{background:linear-gradient(135deg,#6b21a8,#9333ea)}
+  .metric-pill.stability{background:linear-gradient(135deg,#115e59,#0f766e)}
   .metric-pill b{font-weight:800}
   .best-run-banner{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#eef2ff,#f8fafc);
     color:#0f172a;border:1px solid #cbd5e1;padding:10px 14px;border-radius:14px;font-size:12px;font-weight:700;margin-bottom:14px}
@@ -305,17 +308,21 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
   .feas-badge.ok{background:#16a34a;color:#fff}.feas-badge.bad{background:#dc2626;color:#fff}
   .feas-narr{font-size:12.5px;color:var(--ink);line-height:1.6;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
   .feas-narr b{color:var(--accent)}
-  .feas-levers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-  .feas-lever{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}
-  .feas-lever .lk{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-  .feas-lever .lv{font-size:13px;font-weight:800;color:var(--ink);margin-top:3px}
-  .feas-lever.na .lv{color:#94a3b8;font-weight:600}
+  .feas-levers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+  .feas-lever{background:#fff;border:1px solid var(--line);border-top:3px solid #f59e0b;border-radius:12px;padding:14px 10px;text-align:center;box-shadow:0 2px 8px rgba(15,23,42,.05)}
+  .feas-lever .lk{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.2px}
+  .feas-lever .lv{font-size:19px;font-weight:900;color:#b45309;margin-top:7px;line-height:1.1}
+  .feas-lever.na{border-top-color:#cbd5e1;opacity:.65}
+  .feas-lever.na .lv{color:#94a3b8;font-weight:600;font-size:15px}
   .feas-fleet{display:flex;gap:5px;flex-wrap:wrap}
   .feas-fleet .fc{flex:1;min-width:44px;text-align:center;border:1px solid var(--line);border-radius:8px;padding:6px 2px;background:#fff;font-size:11px}
   .feas-fleet .fc.meets{background:#dcfce7;border-color:#86efac;color:#15803d;font-weight:700}
   .feas-fleet .fc .fn{font-size:10px;color:var(--muted)}.feas-fleet .fc.meets .fn{color:#15803d}
   .feas-sub2{font-size:11.5px;color:var(--muted);font-weight:600;margin:-2px 0 10px}
   .feas-tag{font-size:9px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 7px;border-radius:5px;margin-left:6px;text-transform:none;letter-spacing:0}
+  .feas-warn{font-size:12px;line-height:1.6;background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:10px;padding:11px 13px;margin-bottom:12px;color:#78350f}
+  .feas-warn b{color:#92400e}
+  .feas-ok-note{font-size:12px;line-height:1.6;background:#f0fdf4;border:1px solid #bbf7d0;border-left:4px solid #16a34a;border-radius:10px;padding:11px 13px;margin-bottom:12px;color:#14532d;font-weight:600}
   @media(max-width:560px){.feas-levers{grid-template-columns:1fr}}
 
   /* Bars */
@@ -468,7 +475,7 @@ if (DATA && DATA.generated) {
 
 /* ── Tabs ── */
 let mapRoute=null, mapPoints=null, dashDone=false, pointsDone=false;
-let activeMetricView = 'coverage';
+let activeMetricView = 'stability';
 
 document.querySelectorAll('.tab').forEach(b => {
   b.addEventListener('click', () => {
@@ -850,10 +857,12 @@ const SUBCARD_META = {
   timeutil:     {key:'time_util_pct',     title:'⏱️ Utilisasi Waktu per Iterasi', unit:'%',         color:'#9333ea', dec:1},
   spatial:      {key:'spatial_eff',       title:'🎯 Efisiensi per Iterasi',       unit:'titik/km',  color:'#d97706', dec:2},
   serviceratio: {key:'service_ratio_pct', title:'🧰 Rasio Layanan per Iterasi',   unit:'%',         color:'#0d9488', dec:1},
+  stability:    {key:'coverage',          title:'📊 Coverage per Iterasi (sebaran → std)', unit:'titik', color:'#0f766e', dec:1},
 };
 
 /* Registry metrik untuk Analisis Multimetrik (per-iterasi + konvergensi bila ada) */
 const METRICS = {
+  stability:    {label:'📊 Std/Stabilitas', iter:'coverage',         unit:'titik',     conv:'visited',    max:true},
   coverage:     {label:'🎯 Coverage',      iter:'coverage',          unit:'titik',     conv:'visited',    max:true},
   runtime:      {label:'⚡ Runtime',        iter:'runtime_ms',        unit:'ms'},
   throughput:   {label:'🛞 Throughput',     iter:'throughput',        unit:'titik/jam'},
@@ -1035,7 +1044,7 @@ function renderDashboard(){
   /* ── Leaderboard ── */
   html += `<div class="card">
     <h2>🏆 Leaderboard Komparasi Algoritma</h2>
-    <div class="sub">Peringkat performa terintegrasi (55% Coverage · 20% Konsistensi · 15% Efisiensi · 10% Success)</div>
+    <div class="sub">Peringkat performa terintegrasi (55% Coverage · 20% Stabilitas/std · 15% Efisiensi · 10% Success)</div>
     <div class="lb">`;
 
   M.forEach((m, idx) => {
@@ -1073,6 +1082,7 @@ function renderDashboard(){
           <div class="bars-vertical">
             ${bar('Coverage vs Target', m.coverage_avg/target*100, m.coverage_avg+' / '+target, m.color)}
           </div>
+          ${(()=>{const cs=(m.per_iter_detail||[]).map(d=>d.coverage);const mx=cs.length?Math.max(...cs):0,mn=cs.length?Math.min(...cs):0;return `<div class="lb-std">📊 Std antar ${D.n_iterations} iterasi: <b>${m.coverage_std} titik</b> · coverage/iterasi ${mn}–${mx} titik · makin kecil std makin stabil</div>`;})()}
           <div class="metrics-grid">
             <div class="metric-pill runtime" onclick="toggleSubcard(${idx},'runtime',this)"><span class="icon">⚡</span> Runtime: <b>${m.avg_runtime_ms} ms/shift</b><span class="chev">▼</span></div>
             <div class="metric-pill convergence" onclick="toggleSubcard(${idx},'convergence',this)"><span class="icon">🚀</span> Konvergensi: <b>${m.convergence_speed_pct}%</b><span class="chev">▼</span></div>
@@ -1082,7 +1092,7 @@ function renderDashboard(){
             <div class="metric-pill speed" onclick="toggleSubcard(${idx},'speed',this)"><span class="icon">💨</span> Kecepatan: <b>${m.avg_speed_kph} km/jam</b><span class="chev">▼</span></div>
             <div class="metric-pill spatial" onclick="toggleSubcard(${idx},'spatial',this)"><span class="icon">🎯</span> Efisiensi: <b>${m.spatial_eff} titik/km</b><span class="chev">▼</span></div>
             <div class="metric-pill serviceratio" onclick="toggleSubcard(${idx},'serviceratio',this)"><span class="icon">🧰</span> Rasio Layanan: <b>${m.service_ratio_pct}%</b><span class="chev">▼</span></div>
-            <div class="metric-pill timeutil" onclick="toggleSubcard(${idx},'timeutil',this)"><span class="icon">⏱️</span> Utilisasi: <b>${m.time_util_pct}%</b><span class="chev">▼</span></div>
+            <div class="metric-pill stability" onclick="toggleSubcard(${idx},'stability',this)"><span class="icon">📊</span> Std: <b>${m.coverage_std} titik</b><span class="chev">▼</span></div>
           </div>
           <div class="subcard-panel" id="subcard-${idx}"><div class="subcard-inner" id="subcard-inner-${idx}"></div></div>
         </div>
@@ -1132,32 +1142,32 @@ function renderDashboard(){
   if (F && F.vehicles && F.vehicles.length) {
     htmlFeas += `<div class="card">
       <h2>🧭 Peta Jalan Feasibility</h2>
-      <div class="sub">Pada kondisi apa target <b>${F.target} titik/kendaraan</b> tercapai? Status = <b>hasil model terbaik</b> dari ${D.n_iterations} iterasi; lever = estimasi greedy (baseline ${F.base_shift_hours.toFixed(0)} jam/shift × ${F.n_shifts} shift, service ${F.base_service_min.toFixed(0)} mnt/titik).</div>
+      <div class="sub">Agar tiap kendaraan mencapai target <b>${F.target} titik</b>: rekomendasi dihitung dari <b>hasil model terbaik</b> (${D.n_iterations} iterasi) — bukan greedy.</div>
       <div class="feas-grid">`;
     F.vehicles.forEach(v => {
       const ok = v.status === 'TERCAPAI';
-      const t = v.thresholds, bs = F.base_service_min, bh = F.base_shift_hours;
-      const lever = (label, val, none) => `<div class="feas-lever ${val==null?'na':''}"><div class="lk">${label}</div><div class="lv">${val==null?(none||'tak cukup'):val}</div></div>`;
-      const svcTxt  = t.service_min==null ? null : (t.service_min>=bs ? 'tak perlu' : '≤ '+t.service_min.toFixed(0)+' mnt');
-      const spdTxt  = t.speed_pct==null   ? null : (t.speed_pct<=0   ? 'tak perlu' : '+'+t.speed_pct.toFixed(0)+'%');
-      const hrsTxt  = t.shift_hours==null ? null : (t.shift_hours<=bh? 'tak perlu' : '≥ '+t.shift_hours.toFixed(0)+' jam');
+      const r = v.rec || {};
+      const lever = (label, val) => `<div class="feas-lever ${val==null?'na':''}"><div class="lk">${label}</div><div class="lv">${val==null?'—':val}</div></div>`;
+
+      let middle;
+      if (ok) {
+        middle = `<div class="feas-ok-note">✓ Target sudah dicapai model (${v.best_model} ≥ ${v.target}) — tak perlu perubahan.</div>`;
+      } else {
+        middle = `<div class="dt-title">Agar ${capV(v.vehicle)} feasible (≥ ${v.target} titik), pilih SALAH SATU <span class="feas-tag">estimasi dari hasil model</span></div>
+          <div class="feas-levers">
+            ${lever('➕ Tambah kendaraan', r.add_vehicles!=null ? '+'+r.add_vehicles+' unit' : null)}
+            ${lever('⏱️ Perpanjang shift', r.shift_hours!=null ? '≥ '+r.shift_hours+' jam' : null)}
+            ${lever('🧰 Waktu/titik', r.service_min!=null ? '≤ '+r.service_min+' mnt' : null)}
+          </div>`;
+      }
+
       htmlFeas += `<div class="feas-card ${ok?'ok':'bad'}">
         <div class="feas-head">
           <div class="name">${capV(v.vehicle)} — terbaik <b>${v.best_model}</b>/${v.target} titik</div>
           <span class="feas-badge ${ok?'ok':'bad'}">${ok?'Target tercapai':'Belum tercapai'}</span>
         </div>
-        <div class="feas-sub2">Hasil model: <b>${v.best_model}</b> titik · Estimasi greedy: ${v.baseline} titik</div>
         <div class="feas-narr">${v.narrative}</div>
-        <div class="dt-title">Ubah SATU faktor agar capai target <span class="feas-tag">estimasi greedy</span></div>
-        <div class="feas-levers">
-          ${lever('Service', svcTxt)}
-          ${lever('Kecepatan', spdTxt)}
-          ${lever('Jam kerja', hrsTxt)}
-        </div>
-        <div class="dt-title">Coverage armada (titik unik vs jumlah kendaraan)</div>
-        <div class="feas-fleet">
-          ${(v.fleet||[]).map(f => `<div class="fc ${f.meets?'meets':''}"><div>${f.unique}</div><div class="fn">${f.n} unit${f.meets?' ✓':''}</div></div>`).join('')}
-        </div>
+        ${middle}
       </div>`;
     });
     htmlFeas += `</div></div>`;
@@ -1196,7 +1206,7 @@ function renderDashboard(){
     {label:'Coverage', key:'coverage_avg', kind:'max'},
     {label:'Rekor', key:'coverage_best', kind:'max'},
     {label:'Target %', key:'target_attainment_pct', kind:'plain', suf:'%'},
-    {label:'Konsistensi', key:'consistency_pct', kind:'max', suf:'%'},
+    {label:'Std (titik)', key:'coverage_std', kind:'min'},
     {label:'Success', key:'success_rate_pct', kind:'plain', suf:'%'},
     {label:'Titik/jam', key:'throughput', kind:'max'},
     {label:'Titik/km', key:'spatial_eff', kind:'max'},

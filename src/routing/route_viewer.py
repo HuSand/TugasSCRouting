@@ -964,6 +964,25 @@ function toggleAccordion(idx, btn){
   if (btn) btn.classList.toggle('open', !wasOpen);
 }
 
+function toggleTimeAccordion(idx, btn){
+  const content = document.getElementById(`accordion-time-${idx}`);
+  if (!content) return;
+  const wasOpen = content.classList.contains('open');
+  content.classList.toggle('open');
+  if (btn) btn.classList.toggle('open', !wasOpen);
+}
+
+function filterTimeTable(idx){
+  const veh = (document.getElementById('ftveh-'+idx)||{}).value || '';
+  const sh  = (document.getElementById('ftshift-'+idx)||{}).value || '';
+  const tbl = document.getElementById('timetbl-'+idx); if (!tbl) return;
+  tbl.querySelectorAll('tbody tr').forEach(tr => {
+    const okV = !veh || tr.dataset.veh === veh;
+    const okS = !sh  || tr.dataset.shift === sh;
+    tr.style.display = (okV && okS) ? '' : 'none';
+  });
+}
+
 /* ── TAB DASHBOARD ── */
 function renderDashboard(){
   const grid = document.getElementById('dashGrid'); if (!grid) return;
@@ -1071,6 +1090,19 @@ function renderDashboard(){
     });
     const shiftKeys = Object.keys(m.convergence_by_shift||{});
 
+    /* total time per vehicle, detailed per shift & iterasi */
+    let timeRows = '';
+    psd.forEach(d => {
+      const isBest = cm.vehicle && d.iter===cm.iter && d.vehicle===cm.vehicle && d.unit===cm.unit;
+      timeRows += `<tr class="${isBest?'best-row':''}" data-veh="${d.vehicle}" data-shift="${d.shift}">
+        <td>#${d.iter}${isBest?' ⭐':''}</td>
+        <td><span class="veh-tag veh-${d.vehicle}">${capV(d.vehicle)} ${d.unit}</span></td>
+        <td>Shift ${d.shift}</td>
+        <td>${(d.travel_min!=null? d.travel_min:0)} mnt</td>
+        <td><b>${(d.total_min!=null? d.total_min:0)} mnt</b></td>
+      </tr>`;
+    });
+
     html += `<div class="lb-card pos-${idx}">
       <div class="lb-rank">${m.medal || ('#'+m.rank)}</div>
       <div class="lb-avatar" style="background:${m.color}1f;color:${m.color}">${m.icon}</div>
@@ -1097,7 +1129,10 @@ function renderDashboard(){
           <div class="subcard-panel" id="subcard-${idx}"><div class="subcard-inner" id="subcard-inner-${idx}"></div></div>
         </div>
         <div style="margin-top:14px">
-          <button class="accordion-trigger" onclick="toggleAccordion(${idx},this)"><span class="caret">▼</span> Detail Per Shift (identitas kendaraan &amp; iterasi)</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="accordion-trigger" onclick="toggleAccordion(${idx},this)"><span class="caret">▼</span> Detail Per Shift (identitas kendaraan &amp; iterasi)</button>
+            <button class="accordion-trigger" onclick="toggleTimeAccordion(${idx},this)"><span class="caret">▼</span> Detail Estimation Time</button>
+          </div>
           <div class="accordion-content" id="accordion-${idx}">
             <div class="acc-single">
               <div class="acc-head">
@@ -1122,6 +1157,32 @@ function renderDashboard(){
                 </table>
               </div>
               <div class="acc-note">⭐ = kendaraan-run terbaik (${bestId}, ${bestTotal} titik gabungan 2 shift). Kurva konvergensi ada di sub-card <b>🚀 Konvergensi</b> di atas.</div>
+            </div>
+          </div>
+          <div class="accordion-content" id="accordion-time-${idx}">
+            <div class="acc-single">
+              <div class="acc-head">
+                <div class="dt-title" style="margin:0">⏱️ Detail Estimation Time — total waktu tiap kendaraan per iterasi</div>
+                <div class="acc-filters">
+                  <label>Kendaraan</label>
+                  <select id="ftveh-${idx}" onchange="filterTimeTable(${idx})">
+                    <option value="">Semua</option><option value="motor">Motor</option><option value="mobil">Mobil</option>
+                  </select>
+                  <label>Shift</label>
+                  <select id="ftshift-${idx}" onchange="filterTimeTable(${idx})">
+                    <option value="">Semua</option>${shiftKeys.map(k=>`<option value="${k}">Shift ${k}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+              <div class="table-container">
+                <table class="iter-table time-table" id="timetbl-${idx}">
+                  <thead><tr>
+                    <th>Iter</th><th>Kendaraan</th><th>Shift</th><th>Waktu Tempuh</th><th>Total Waktu</th>
+                  </tr></thead>
+                  <tbody>${timeRows}</tbody>
+                </table>
+              </div>
+              <div class="acc-note">⏱️ Total Waktu = waktu (tempuh + layanan) tiap kendaraan per shift di tiap iterasi. ⭐ = kendaraan-run terbaik (${bestId}).</div>
             </div>
           </div>
         </div>
